@@ -113,9 +113,8 @@ def upload_image(image_url):
     if response.status_code == 200:
         logger.debug("Upload successful: %s", response.json())
         return response.json()  # Return the JSON response if needed
-    else:
-        logger.warning("Upload failed: %s - %s", response.status_code, response.text)
-        return None  # Return None if the upload failed
+    logger.warning("Upload failed: %s - %s", response.status_code, response.text)
+    return None  # Return None if the upload failed
 
 
 def send_message(message):
@@ -166,8 +165,15 @@ def send_message(message):
             response = requests.post(
                 GROUPME_API, data=json.dumps(data), headers=headers, timeout=10
             )
-            response.raise_for_status()
-            logger.debug("Sent: %s", segment_label + segment)
+            if response.status_code == 200:
+                try:
+                    response_json = response.json()
+                    logger.debug("Sent: %s", segment_label + segment)
+                    logger.debug("Response JSON: %s", response_json)
+                except json.JSONDecodeError:
+                    logger.debug("Response was not JSON-formatted, but message sent successfully.")
+            else:
+                logger.error("Failed to send message: %s - %s", response.status_code, response.text)
 
         # Send images if they exist
         for image_url in images:
@@ -180,8 +186,15 @@ def send_message(message):
                 headers=headers,
                 timeout=10,
             )
-            image_response.raise_for_status()
-            logger.debug("Image sent: %s", image_response.json())
+            if image_response.status_code == 200:
+                try:
+                    image_response_json = image_response.json()
+                    logger.debug("Image Sent: %s", image_url)
+                    logger.debug("Response JSON: %s", image_response_json)
+                except json.JSONDecodeError:
+                    logger.debug("Response was not JSON-formatted, but message sent successfully.")
+            else:
+                logger.error("Failed to send message: %s - %s", image_response.status_code, image_response.text)
     except requests.exceptions.RequestException as e:
         logger.error("Failed to send message: %s", e)
 
