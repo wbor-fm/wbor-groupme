@@ -58,7 +58,9 @@ logging.getLogger("werkzeug").setLevel(logging.INFO)
 app = Flask(__name__)
 
 if not GROUPME_BOT_ID or not GROUPME_ACCESS_TOKEN:
-    logger.critical("GROUPME_BOT_ID or GROUPME_ACCESS_TOKEN is missing. Exiting application.")
+    logger.critical(
+        "GROUPME_BOT_ID or GROUPME_ACCESS_TOKEN is missing. Exiting application."
+    )
     exit(1)
 
 
@@ -165,19 +167,29 @@ def send_message(message):
             response = requests.post(
                 GROUPME_API, data=json.dumps(data), headers=headers, timeout=10
             )
-            if response.status_code == 200:
+            if response.status_code == 200 or response.status_code == 202:
                 try:
                     response_json = response.json()
                     logger.debug("Sent: %s", segment_label + segment)
                     logger.debug("Response JSON: %s", response_json)
                 except json.JSONDecodeError:
-                    logger.debug("Response was not JSON-formatted, but message sent successfully.")
+                    logger.debug(
+                        "Response was not JSON-formatted, but message sent successfully."
+                    )
             else:
-                logger.error("Failed to send message: %s - %s", response.status_code, response.text)
+                logger.error(
+                    "Failed to send message: %s - %s",
+                    response.status_code,
+                    response.text,
+                )
 
         # Send images if they exist
         for image_url in images:
-            image_data = {"bot_id": GROUPME_BOT_ID, "picture_url": image_url, "text": ""}
+            image_data = {
+                "bot_id": GROUPME_BOT_ID,
+                "picture_url": image_url,
+                "text": "",
+            }
             headers = {"Content-Type": "application/json"}
 
             image_response = requests.post(
@@ -186,15 +198,21 @@ def send_message(message):
                 headers=headers,
                 timeout=10,
             )
-            if image_response.status_code == 200:
+            if image_response.status_code == 200 or image_response.status_code == 202:
                 try:
                     image_response_json = image_response.json()
                     logger.debug("Image Sent: %s", image_url)
                     logger.debug("Response JSON: %s", image_response_json)
                 except json.JSONDecodeError:
-                    logger.debug("Response was not JSON-formatted, but message sent successfully.")
+                    logger.debug(
+                        "Response was not JSON-formatted, but message sent successfully."
+                    )
             else:
-                logger.error("Failed to send message: %s - %s", image_response.status_code, image_response.text)
+                logger.error(
+                    "Failed to send message: %s - %s",
+                    image_response.status_code,
+                    image_response.text,
+                )
     except requests.exceptions.RequestException as e:
         logger.error("Failed to send message: %s", e)
 
