@@ -171,10 +171,12 @@ def send_message(message):
         # Send images if they exist
         for image_url in images:
             image_data = {"bot_id": GROUPME_BOT_ID, "picture_url": image_url}
+            headers = {"Content-Type": "application/json"}
 
             image_response = requests.post(
                 GROUPME_API,
                 data=json.dumps(image_data),
+                headers=headers,
                 timeout=10,
             )
             image_response.raise_for_status()
