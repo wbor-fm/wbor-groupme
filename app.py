@@ -57,19 +57,22 @@ app = Flask(__name__)
 
 
 def send_message(body):
-    """Send a message to the GroupMe group chat."""
+    """
+    Send a message to the GroupMe group chat.
+    
+    Parameters:
+    - body (str): The message to send
+    
+    Throws:
+    - requests.exceptions.RequestException: If the message fails to send  
+    """
     try:
-        message = json.loads(body)
-        logger.debug("Received message: %s", message)
-
-        sender_number = message.get("From")
-        message_body = message.get("Body")
-        logger.debug("Processing message from %s", sender_number)
+        logger.debug("Sending message: %s", body)
 
         # GroupMe has a character limit. Split the message into segments if it exceeds the limit.
         segments = []
-        for i in range(0, len(message_body), abs(int(GROUPME_CHARACTER_LIMIT))):
-            segments.append(message_body[i : i + abs(int(GROUPME_CHARACTER_LIMIT))])
+        for i in range(0, len(body), abs(int(GROUPME_CHARACTER_LIMIT))):
+            segments.append(body[i : i + abs(int(GROUPME_CHARACTER_LIMIT))])
 
         for segment in segments:
             data = {"text": f'"{segment}"\n---------', "bot_id": GROUPME_BOT_ID}
@@ -81,14 +84,25 @@ def send_message(body):
         headers = {"Content-Type": "application/json"}
 
         requests.post(GROUPME_API, data=json.dumps(data), headers=headers, timeout=10)
-    except (json.JSONDecodeError, KeyError) as e:
-        logger.error("Failed to process message: %s", e)
+    except requests.exceptions.RequestException as e:
+        logger.error("Failed to send message: %s", e)
 
 
 def callback(_ch, _method, _properties, body):
     """Callback function to process messages from the RabbitMQ queue."""
     logger.info("Callback triggered.")
-    send_message(body)
+    
+    try:
+        message = json.loads(body)
+        logger.debug("Received message: %s", message)
+        
+        sender_number = message.get("From")
+        logger.debug("Processing message from %s", sender_number)
+        
+        body = message.get("Body")
+        send_message(body)
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.error("Failed to execute callback: %s", e)
 
 
 def consume_messages():
