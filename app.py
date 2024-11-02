@@ -57,6 +57,10 @@ logging.getLogger("werkzeug").setLevel(logging.INFO)
 
 app = Flask(__name__)
 
+if not GROUPME_BOT_ID or not GROUPME_ACCESS_TOKEN:
+    logger.critical("GROUPME_BOT_ID or GROUPME_ACCESS_TOKEN is missing. Exiting application.")
+    exit(1)
+
 
 def upload_image(image_url):
     """
@@ -171,7 +175,6 @@ def send_message(message):
             image_response = requests.post(
                 GROUPME_API,
                 data=json.dumps(image_data),
-                headers=headers,
                 timeout=10,
             )
             image_response.raise_for_status()
