@@ -77,13 +77,12 @@ def send_message(body):
         for segment in segments:
             data = {"text": f'"{segment}"\n---------', "bot_id": GROUPME_BOT_ID}
             headers = {"Content-Type": "application/json"}
-            requests.post(
+            response = requests.post(
                 GROUPME_API, data=json.dumps(data), headers=headers, timeout=10
             )
+            response.raise_for_status()
 
-        headers = {"Content-Type": "application/json"}
-
-        requests.post(GROUPME_API, data=json.dumps(data), headers=headers, timeout=10)
+        logger.debug("Sent!")
     except requests.exceptions.RequestException as e:
         logger.error("Failed to send message: %s", e)
 
