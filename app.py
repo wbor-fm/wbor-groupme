@@ -23,7 +23,7 @@ RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "guest")
 GROUPME_QUEUE = os.getenv("GROUPME_QUEUE", "groupme")
 GROUPME_BOT_ID = os.getenv("GROUPME_BOT_ID")
-GROUPME_CHARACTER_LIMIT = os.getenv("GROUPME_CHARACTER_LIMIT", "480")
+GROUPME_CHARACTER_LIMIT = abs(int(os.getenv("GROUPME_CHARACTER_LIMIT", "470")))
 
 GROUPME_API = "https://api.groupme.com/v3/bots/post"
 
@@ -59,23 +59,40 @@ app = Flask(__name__)
 def send_message(body):
     """
     Send a message to the GroupMe group chat.
-    
+
     Parameters:
     - body (str): The message to send
-    
+
     Throws:
-    - requests.exceptions.RequestException: If the message fails to send  
+    - requests.exceptions.RequestException: If the message fails to send
     """
     try:
         logger.debug("Sending message: %s", body)
 
         # GroupMe has a character limit. Split the message into segments if it exceeds the limit.
         segments = []
-        for i in range(0, len(body), abs(int(GROUPME_CHARACTER_LIMIT))):
-            segments.append(body[i : i + abs(int(GROUPME_CHARACTER_LIMIT))])
+        for i in range(0, len(body), GROUPME_CHARACTER_LIMIT):
+            segments.append(body[i : i + GROUPME_CHARACTER_LIMIT])
+
+        total_segments = len(segments)
 
         for segment in segments:
             data = {"text": f'"{segment}"\n---------', "bot_id": GROUPME_BOT_ID}
+            headers = {"Content-Type": "application/json"}
+            response = requests.post(
+                GROUPME_API, data=json.dumps(data), headers=headers, timeout=10
+            )
+            response.raise_for_status()
+
+        for index, segment in enumerate(segments, start=1):
+            segment_label = (
+                f"({index}/{total_segments}): " if total_segments > 1 else ""
+            )  # Max 17 chars.
+            end_marker = "\n---------" if index == total_segments else ""  # 10 chars.
+            data = {
+                "text": f"{segment_label}{segment}{end_marker}",
+                "bot_id": GROUPME_BOT_ID,
+            }
             headers = {"Content-Type": "application/json"}
             response = requests.post(
                 GROUPME_API, data=json.dumps(data), headers=headers, timeout=10
@@ -90,14 +107,14 @@ def send_message(body):
 def callback(_ch, _method, _properties, body):
     """Callback function to process messages from the RabbitMQ queue."""
     logger.info("Callback triggered.")
-    
+
     try:
         message = json.loads(body)
         logger.debug("Received message: %s", message)
-        
+
         sender_number = message.get("From")
         logger.debug("Processing message from %s", sender_number)
-        
+
         body = message.get("Body")
         send_message(body)
     except (json.JSONDecodeError, KeyError) as e:
