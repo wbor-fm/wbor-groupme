@@ -103,7 +103,7 @@ def upload_image(image_url):
 
     # Upload the downloaded image to GroupMe
     response = requests.post(
-        image_url, headers=headers, data=image_response.content, timeout=10
+        GROUPME_IMAGE_API, headers=headers, data=image_response.content, timeout=10
     )
 
     if response.status_code == 200:
@@ -162,21 +162,20 @@ def send_message(message):
                 GROUPME_API, data=json.dumps(data), headers=headers, timeout=10
             )
             response.raise_for_status()
+            logger.debug("Sent: %s", segment_label + segment)
 
-            # Send images if they exist
-            for image_url in images:
-                image_data = {"bot_id": GROUPME_BOT_ID, "picture_url": image_url}
+        # Send images if they exist
+        for image_url in images:
+            image_data = {"bot_id": GROUPME_BOT_ID, "picture_url": image_url}
 
-                image_response = requests.post(
-                    GROUPME_API,
-                    data=json.dumps(image_data),
-                    headers=headers,
-                    timeout=10,
-                )
-                image_response.raise_for_status()
-                logger.debug("Image sent: %s", image_response.json())
-
-        logger.debug("Sent!")
+            image_response = requests.post(
+                GROUPME_API,
+                data=json.dumps(image_data),
+                headers=headers,
+                timeout=10,
+            )
+            image_response.raise_for_status()
+            logger.debug("Image sent: %s", image_response.json())
     except requests.exceptions.RequestException as e:
         logger.error("Failed to send message: %s", e)
 
