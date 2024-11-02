@@ -73,29 +73,33 @@ def upload_image(image_url):
     - Exception: If the image fails to download from Twilio
     """
     mime_types = {
-        ".gif": "image/gif",
-        ".jpeg": "image/jpeg",
-        ".jpg": "image/jpeg",
-        ".png": "image/png",
-    }
-    file_extension = os.path.splitext(image_url)[1].lower()
-    if file_extension not in mime_types:
-        raise ValueError(
-            "Unsupported file type. Please use a .gif, .jpeg, .jpg, or .png file."
-        )
-
-    headers = {
-        "X-Access-Token": GROUPME_ACCESS_TOKEN,
-        "Content-Type": mime_types[file_extension],
+        "image/gif": ".gif",
+        "image/jpeg": ".jpeg",
+        "image/png": ".png",
     }
 
     # Download the image from Twilio
-    image_response = requests.get(image_url, timeout=10)
+    image_response = requests.get(image_url, stream=True, timeout=10)
     if image_response.status_code != 200:
         raise requests.exceptions.RequestException(
-            f"Failed to download image: \
+            f"Failed to download image from Twilio: \
             {image_response.status_code}"
         )
+
+    content_type = image_response.headers.get("Content-Type", "").lower()
+    file_extension = mime_types.get(content_type)
+
+    if not file_extension:
+        logger.warning(
+            "Unsupported file type `%s`. Please use a .gif, .jpeg, .jpg, or .png file.",
+            file_extension,
+        )
+        return None
+
+    headers = {
+        "X-Access-Token": GROUPME_ACCESS_TOKEN,
+        "Content-Type": content_type,
+    }
 
     # Upload the downloaded image to GroupMe
     response = requests.post(
@@ -128,10 +132,10 @@ def send_message(message):
         images = []
         for i in range(10):
             media_url_key = f"MediaUrl{i}"
-
             if media_url_key in message:
                 image_url = upload_image(message[media_url_key])
-                images.append(image_url)
+                if image_url is not None:
+                    images.append(image_url)
 
         # GroupMe has a character limit. Split the message into segments if it exceeds the limit.
         segments = []
