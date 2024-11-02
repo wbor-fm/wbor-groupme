@@ -171,7 +171,7 @@ def send_message(message):
 
         # Send images if they exist
         for image_url in images:
-            image_data = {"bot_id": GROUPME_BOT_ID, "picture_url": image_url}
+            image_data = {"bot_id": GROUPME_BOT_ID, "picture_url": image_url, "text": ""}
             headers = {"Content-Type": "application/json"}
 
             image_response = requests.post(
