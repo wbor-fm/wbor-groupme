@@ -1,6 +1,6 @@
 """
-Postgres Handler.
-- Consumes messages from the RabbitMQ queue to insert SMS data into a Postgres database.
+GroupMe Handler.
+- Consumes messages from the RabbitMQ queue to forward to a GroupMe group chat.
 """
 
 import os
@@ -23,6 +23,7 @@ RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "guest")
 GROUPME_QUEUE = os.getenv("GROUPME_QUEUE", "groupme")
 GROUPME_BOT_ID = os.getenv("GROUPME_BOT_ID")
+GROUPME_CHARACTER_LIMIT = os.getenv("GROUPME_CHARACTER_LIMIT", "480")
 
 GROUPME_API = "https://api.groupme.com/v3/bots/post"
 
@@ -55,9 +56,8 @@ logging.getLogger("werkzeug").setLevel(logging.INFO)
 app = Flask(__name__)
 
 
-def callback(_ch, _method, _properties, body):
-    """Callback function to process messages from the RabbitMQ queue."""
-    logger.info("Callback triggered.")
+def send_message(body):
+    """Send a message to the GroupMe group chat."""
     try:
         message = json.loads(body)
         logger.debug("Received message: %s", message)
@@ -66,17 +66,29 @@ def callback(_ch, _method, _properties, body):
         message_body = message.get("Body")
         logger.debug("Processing message from %s", sender_number)
 
-        # Send message to GroupMe
-        data = {
-            'text': f"\"{message_body}\"\n---------",
-            'bot_id': GROUPME_BOT_ID
-        }
+        # GroupMe has a character limit. Split the message into segments if it exceeds the limit.
+        segments = []
+        for i in range(0, len(message_body), abs(int(GROUPME_CHARACTER_LIMIT))):
+            segments.append(message_body[i : i + abs(int(GROUPME_CHARACTER_LIMIT))])
 
-        headers = {'Content-Type': 'application/json'}
+        for segment in segments:
+            data = {"text": f'"{segment}"\n---------', "bot_id": GROUPME_BOT_ID}
+            headers = {"Content-Type": "application/json"}
+            requests.post(
+                GROUPME_API, data=json.dumps(data), headers=headers, timeout=10
+            )
+
+        headers = {"Content-Type": "application/json"}
 
         requests.post(GROUPME_API, data=json.dumps(data), headers=headers, timeout=10)
     except (json.JSONDecodeError, KeyError) as e:
         logger.error("Failed to process message: %s", e)
+
+
+def callback(_ch, _method, _properties, body):
+    """Callback function to process messages from the RabbitMQ queue."""
+    logger.info("Callback triggered.")
+    send_message(body)
 
 
 def consume_messages():
