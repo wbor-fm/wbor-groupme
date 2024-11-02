@@ -23,7 +23,7 @@ RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "guest")
 GROUPME_QUEUE = os.getenv("GROUPME_QUEUE", "groupme")
 GROUPME_BOT_ID = os.getenv("GROUPME_BOT_ID")
-GROUPME_CHARACTER_LIMIT = abs(int(os.getenv("GROUPME_CHARACTER_LIMIT", "470")))
+GROUPME_CHARACTER_LIMIT = abs(int(os.getenv("GROUPME_CHARACTER_LIMIT", "970")))
 
 GROUPME_API = "https://api.groupme.com/v3/bots/post"
 
