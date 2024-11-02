@@ -23,9 +23,11 @@ RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "guest")
 GROUPME_QUEUE = os.getenv("GROUPME_QUEUE", "groupme")
 GROUPME_BOT_ID = os.getenv("GROUPME_BOT_ID")
+GROUPME_ACCESS_TOKEN = os.getenv("GROUPME_ACCESS_TOKEN")
 GROUPME_CHARACTER_LIMIT = abs(int(os.getenv("GROUPME_CHARACTER_LIMIT", "970")))
 
 GROUPME_API = "https://api.groupme.com/v3/bots/post"
+GROUPME_IMAGE_API = "https://image.groupme.com/pictures"
 
 # Logging
 logger = logging.getLogger(__name__)
@@ -56,7 +58,59 @@ logging.getLogger("werkzeug").setLevel(logging.INFO)
 app = Flask(__name__)
 
 
-def send_message(body):
+def upload_image(image_url):
+    """
+    Upload a Twilio image to GroupMe's image service.
+
+    Parameters:
+    - image_url (str): The URL of the image to upload
+
+    Returns:
+    - dict: The JSON response from the GroupMe API, including the GroupMe image URL
+
+    Throws:
+    - ValueError: If the image file type is unsupported
+    - Exception: If the image fails to download from Twilio
+    """
+    mime_types = {
+        ".gif": "image/gif",
+        ".jpeg": "image/jpeg",
+        ".jpg": "image/jpeg",
+        ".png": "image/png",
+    }
+    file_extension = os.path.splitext(image_url)[1].lower()
+    if file_extension not in mime_types:
+        raise ValueError(
+            "Unsupported file type. Please use a .gif, .jpeg, .jpg, or .png file."
+        )
+
+    headers = {
+        "X-Access-Token": GROUPME_ACCESS_TOKEN,
+        "Content-Type": mime_types[file_extension],
+    }
+
+    # Download the image from Twilio
+    image_response = requests.get(image_url, timeout=10)
+    if image_response.status_code != 200:
+        raise requests.exceptions.RequestException(
+            f"Failed to download image: \
+            {image_response.status_code}"
+        )
+
+    # Upload the downloaded image to GroupMe
+    response = requests.post(
+        image_url, headers=headers, data=image_response.content, timeout=10
+    )
+
+    if response.status_code == 200:
+        logger.debug("Upload successful: %s", response.json())
+        return response.json()  # Return the JSON response if needed
+    else:
+        logger.warning("Upload failed: %s - %s", response.status_code, response.text)
+        return None  # Return None if the upload failed
+
+
+def send_message(message):
     """
     Send a message to the GroupMe group chat.
 
@@ -67,7 +121,17 @@ def send_message(body):
     - requests.exceptions.RequestException: If the message fails to send
     """
     try:
+        body = message.get("Body")
         logger.debug("Sending message: %s", body)
+
+        # Check for Media
+        images = []
+        for i in range(10):
+            media_url_key = f"MediaUrl{i}"
+
+            if media_url_key in message:
+                image_url = upload_image(message[media_url_key])
+                images.append(image_url)
 
         # GroupMe has a character limit. Split the message into segments if it exceeds the limit.
         segments = []
@@ -95,6 +159,19 @@ def send_message(body):
             )
             response.raise_for_status()
 
+            # Send images if they exist
+            for image_url in images:
+                image_data = {"bot_id": GROUPME_BOT_ID, "picture_url": image_url}
+
+                image_response = requests.post(
+                    GROUPME_API,
+                    data=json.dumps(image_data),
+                    headers=headers,
+                    timeout=10,
+                )
+                image_response.raise_for_status()
+                logger.debug("Image sent: %s", image_response.json())
+
         logger.debug("Sent!")
     except requests.exceptions.RequestException as e:
         logger.error("Failed to send message: %s", e)
@@ -111,8 +188,7 @@ def callback(_ch, _method, _properties, body):
         sender_number = message.get("From")
         logger.debug("Processing message from %s", sender_number)
 
-        body = message.get("Body")
-        send_message(body)
+        send_message(message)
     except (json.JSONDecodeError, KeyError) as e:
         logger.error("Failed to execute callback: %s", e)
 
