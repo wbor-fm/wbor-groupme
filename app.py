@@ -137,7 +137,8 @@ def send_message(message):
         for i in range(10):
             media_url_key = f"MediaUrl{i}"
             if media_url_key in message:
-                image_url = upload_image(message[media_url_key])
+                upload_response = upload_image(message[media_url_key])
+                image_url = upload_response.get("payload", {}).get("url")
                 if image_url is not None:
                     images.append(image_url)
 
