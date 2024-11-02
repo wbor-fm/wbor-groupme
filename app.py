@@ -76,24 +76,20 @@ def send_message(body):
 
         total_segments = len(segments)
 
-        for segment in segments:
-            data = {"text": f'"{segment}"\n---------', "bot_id": GROUPME_BOT_ID}
-            headers = {"Content-Type": "application/json"}
-            response = requests.post(
-                GROUPME_API, data=json.dumps(data), headers=headers, timeout=10
-            )
-            response.raise_for_status()
-
         for index, segment in enumerate(segments, start=1):
+            # Add segment label and end marker if there are multiple segments
             segment_label = (
-                f"({index}/{total_segments}): " if total_segments > 1 else ""
+                f"({index}/{total_segments}):\n" if total_segments > 1 else ""
             )  # Max 17 chars.
             end_marker = "\n---------" if index == total_segments else ""  # 10 chars.
+
             data = {
                 "text": f"{segment_label}{segment}{end_marker}",
                 "bot_id": GROUPME_BOT_ID,
             }
             headers = {"Content-Type": "application/json"}
+
+            # Send the message
             response = requests.post(
                 GROUPME_API, data=json.dumps(data), headers=headers, timeout=10
             )
