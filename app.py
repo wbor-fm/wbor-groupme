@@ -137,7 +137,7 @@ def send_message_to_groupme(message):
         if unsupported_type:
             send_to_groupme({
                 "text": (
-                    "A media item was sent with an unsupported format.\n"
+                    "A media item was sent with an unsupported format.\n\n"
                     "Check the message in Twilio logs for details.\n"
                     "---------"
                 ),
