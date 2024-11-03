@@ -128,38 +128,56 @@ def send_message_to_groupme(message):
         body = message.get("Body")
         logger.debug("Sending message: %s", body)
 
-        images = extract_images(message)
+        images, unsupported_type = extract_images(message)
         segments = split_message(body)
 
         send_text_segments(segments)
         send_images(images)
 
+        if unsupported_type:
+            send_to_groupme(
+                {
+                    "text": "A media item was sent with an unsupported format. \
+                    Check the message in Twilio logs for details.",
+                    "bot_id": GROUPME_BOT_ID,
+                }
+            )
+
     except requests.exceptions.RequestException as e:
         logger.error("Failed to send message: %s", e)
+
 
 def extract_images(message):
     """
     Extract image URLs from the message and upload them.
     """
+    unsupported_type = False
+
     images = []
     for i in range(10):
         media_url_key = f"MediaUrl{i}"
         if media_url_key in message:
             upload_response = upload_image(message[media_url_key])
-            image_url = upload_response.get("payload", {}).get("url")
-            if image_url:
-                images.append(image_url)
-    return images
+            if upload_response is not None:
+                image_url = upload_response.get("payload", {}).get("url")
+                if image_url:
+                    images.append(image_url)
+            else:
+                logger.warning("Failed to upload media: %s", message[media_url_key])
+                unsupported_type = True
+    return images, unsupported_type
+
 
 def split_message(body):
     """
     Split the message body if it exceeds GroupMe's character limit.
     """
     segments = [
-        body[i: i + GROUPME_CHARACTER_LIMIT]
+        body[i : i + GROUPME_CHARACTER_LIMIT]
         for i in range(0, len(body), GROUPME_CHARACTER_LIMIT)
     ]
     return segments
+
 
 def send_text_segments(segments):
     """
@@ -167,15 +185,14 @@ def send_text_segments(segments):
     """
     total_segments = len(segments)
     for index, segment in enumerate(segments, start=1):
-        segment_label = (
-            f"({index}/{total_segments}):\n" if total_segments > 1 else ""
-        )
+        segment_label = f"({index}/{total_segments}):\n" if total_segments > 1 else ""
         end_marker = "\n---------" if index == total_segments else ""
         data = {
             "text": f"{segment_label}{segment}{end_marker}",
             "bot_id": GROUPME_BOT_ID,
         }
         send_to_groupme(data)
+
 
 def send_images(images):
     """
@@ -189,12 +206,15 @@ def send_images(images):
         }
         send_to_groupme(image_data)
 
+
 def send_to_groupme(data):
     """
     Make the HTTP POST request to GroupMe API and log the response.
     """
     headers = {"Content-Type": "application/json"}
-    response = requests.post(GROUPME_API, data=json.dumps(data), headers=headers, timeout=10)
+    response = requests.post(
+        GROUPME_API, data=json.dumps(data), headers=headers, timeout=10
+    )
 
     if response.status_code in {200, 202}:
         try:
@@ -202,9 +222,14 @@ def send_to_groupme(data):
             logger.debug("Message Sent: %s", data.get("text", "Image"))
             logger.debug("Response JSON: %s", response_json)
         except json.JSONDecodeError:
-            logger.debug("Response was not JSON-formatted, but message sent successfully.")
+            logger.debug(
+                "Response was not JSON-formatted, but message sent successfully."
+            )
     else:
-        logger.error("Failed to send message: %s - %s", response.status_code, response.text)
+        logger.error(
+            "Failed to send message: %s - %s", response.status_code, response.text
+        )
+
 
 def callback(_ch, _method, _properties, body):
     """Callback function to process messages from the RabbitMQ queue."""
