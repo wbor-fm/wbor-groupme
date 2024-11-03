@@ -189,7 +189,7 @@ def send_text_segments(segments):
         segment_label = f"({index}/{total_segments}):\n" if total_segments > 1 else ""
         end_marker = "\n---------" if index == total_segments else ""
         data = {
-            "text": f"{segment_label}{segment}{end_marker}",
+            "text": f"{segment_label}\"{segment}\"{end_marker}",
             "bot_id": GROUPME_BOT_ID,
         }
         send_to_groupme(data)
