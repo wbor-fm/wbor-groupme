@@ -135,13 +135,14 @@ def send_message_to_groupme(message):
         send_images(images)
 
         if unsupported_type:
-            send_to_groupme(
-                {
-                    "text": "A media item was sent with an unsupported format.\n \
-                        Check the message in Twilio logs for details.\n---------",
-                    "bot_id": GROUPME_BOT_ID,
-                }
-            )
+            send_to_groupme({
+                "text": (
+                    "A media item was sent with an unsupported format.\n"
+                    "Check the message in Twilio logs for details.\n"
+                    "---------"
+                ),
+                "bot_id": GROUPME_BOT_ID,
+            })
 
     except requests.exceptions.RequestException as e:
         logger.error("Failed to send message: %s", e)
