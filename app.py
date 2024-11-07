@@ -218,14 +218,8 @@ def send_to_groupme(data):
     )
 
     if response.status_code in {200, 202}:
-        try:
-            response_json = response.json()
-            logger.debug("Message Sent: %s", data.get("text", "Image"))
-            logger.debug("Response JSON: %s", response_json)
-        except json.JSONDecodeError:
-            logger.debug(
-                "Response was not JSON-formatted, but message sent successfully."
-            )
+        logger.debug("Message Sent: %s", data.get("text", "Image"))
+        logger.debug("Response: %s", response)
     else:
         logger.error(
             "Failed to send message: %s - %s", response.status_code, response.text
