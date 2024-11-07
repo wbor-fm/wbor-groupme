@@ -5,6 +5,8 @@ HOST_DIR = "/var/wbor-groupme"
 
 default: clean build run logsf
 
+q: clean build run
+
 exec:
 	docker exec -it $(CONTAINER_NAME) /bin/bash
 
