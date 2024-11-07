@@ -254,7 +254,11 @@ def consume_messages():
         logger.debug("Attempting to connect to RabbitMQ...")
         credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
         parameters = pika.ConnectionParameters(
-            host=RABBITMQ_HOST, credentials=credentials
+            host=RABBITMQ_HOST,
+            credentials=credentials,
+            client_properties={
+                'connection_name': 'GroupMeConsumerConnection'
+            }
         )
         try:
             connection = pika.BlockingConnection(parameters)
