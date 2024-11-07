@@ -219,7 +219,6 @@ def send_to_groupme(data):
 
     if response.status_code in {200, 202}:
         logger.debug("Message Sent: %s", data.get("text", "Image"))
-        logger.debug("Response: %s", response)
     else:
         logger.error(
             "Failed to send message: %s - %s", response.status_code, response.text
