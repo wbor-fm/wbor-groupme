@@ -311,7 +311,7 @@ def send_to_groupme(body, bot_id=GROUPME_BOT_ID):
         )
 
 
-def callback(_ch, _method, _properties, body):
+def callback(ch, method, _properties, body):
     """
     Callback function to process messages from the RabbitMQ queue.
 
@@ -346,9 +346,11 @@ def callback(_ch, _method, _properties, body):
         logger.debug("Processing message from %s", sender_number)
 
         send_message_to_groupme(message)
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+        logger.debug("Message acknowledged: %s", message)
     except (json.JSONDecodeError, KeyError) as e:
         logger.error("Failed to execute callback: %s", e)
-
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
 def consume_messages():
     """Consume messages from the RabbitMQ queue."""
@@ -365,7 +367,7 @@ def consume_messages():
             channel = connection.channel()
             channel.queue_declare(queue=GROUPME_QUEUE, durable=True)
             channel.basic_consume(
-                queue=GROUPME_QUEUE, on_message_callback=callback, auto_ack=True
+                queue=GROUPME_QUEUE, on_message_callback=callback, auto_ack=False
             )
             logger.info("Now ready to consume messages.")
             channel.start_consuming()
