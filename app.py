@@ -363,12 +363,15 @@ def callback(ch, method, _properties, body):
             )
         else:
             logger.error(
-                "Failed to send acknowledgment for message ID: %s. Status: %s",
+                "Acknowledgment failed for message ID: %s. Status: %s",
                 message["wbor_message_id"],
                 ack_response.status_code,
             )
     except (json.JSONDecodeError, KeyError) as e:
         logger.error("Failed to execute callback: %s", e)
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+    except requests.exceptions.ReadTimeout as e:
+        logger.error("Failed to send acknowledgment: %s", e)
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
 
