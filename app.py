@@ -36,7 +36,7 @@ RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "guest")
 GROUPME_QUEUE = os.getenv("GROUPME_QUEUE", "groupme")
 GROUPME_BOT_ID = os.getenv("GROUPME_BOT_ID")
 GROUPME_ACCESS_TOKEN = os.getenv("GROUPME_ACCESS_TOKEN")
-GROUPME_CHARACTER_LIMIT = abs(int(os.getenv("GROUPME_CHARACTER_LIMIT", "970")))
+GROUPME_CHARACTER_LIMIT = abs(int(os.getenv("GROUPME_CHARACTER_LIMIT", "900")))
 
 GROUPME_API = "https://api.groupme.com/v3/bots/post"
 GROUPME_IMAGE_API = "https://image.groupme.com/pictures"
@@ -170,7 +170,8 @@ def send_message_to_groupme(message):
     """
     try:
         body = message.get("Body")
-        logger.debug("Sending message: %s", body)
+        uid = message.get("wbor_message_id")
+        logger.debug("Sending message %s: %s", uid, body)
 
         # Extract images from the message and upload them to GroupMe
         images, unsupported_type = extract_images(message)
@@ -178,7 +179,7 @@ def send_message_to_groupme(message):
         # Split the message into segments if it exceeds GroupMe's character limit
         if body:
             segments = split_message(body)
-            send_text_segments(segments)
+            send_text_segments(segments, uid)
 
         if images:
             send_images(images)
@@ -189,7 +190,9 @@ def send_message_to_groupme(message):
                     "text": (
                         "A media item was sent with an unsupported format.\n\n"
                         "Check the message in Twilio logs for details.\n"
-                        "---------"
+                        "---------\n"
+                        "%s\n"
+                        "---------", uid
                     )
                 }
             )
@@ -245,13 +248,14 @@ def split_message(body):
     return segments
 
 
-def send_text_segments(segments):
+def send_text_segments(segments, uid):
     """
     Send each text segment to GroupMe.
     Pre-process the text to include segment labels (if applicable) and an end marker.
 
     Parameters:
     - segments (list): A list of message segment strings
+    - uid (str): The unique message ID
 
     Returns:
     - None
@@ -259,7 +263,7 @@ def send_text_segments(segments):
     total_segments = len(segments)
     for index, segment in enumerate(segments, start=1):
         segment_label = f"({index}/{total_segments}):\n" if total_segments > 1 else ""
-        end_marker = "\n---------" if index == total_segments else ""
+        end_marker = f"\n---------{uid}\n\n---------" if index == total_segments else ""
         data = {
             "text": f'{segment_label}"{segment}"{end_marker}',
         }
