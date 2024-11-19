@@ -297,11 +297,10 @@ def send_to_groupme(body, bot_id=GROUPME_BOT_ID):
     Throws:
     - requests.exceptions.RequestException: If the HTTP POST request fails
     """
-    headers = {"Content-Type": "application/json"}
     body["bot_id"] = bot_id
 
     response = requests.post(
-        GROUPME_API, body=json.dumps(body), headers=headers, timeout=10
+        GROUPME_API, json=body, timeout=10
     )
 
     if response.status_code in {200, 202}:
