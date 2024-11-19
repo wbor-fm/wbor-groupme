@@ -156,6 +156,8 @@ def send_message_to_groupme(message):
 
     Send a message with optional images to GroupMe.
 
+    This entire process should take no longer than 5 seconds to complete.
+
     Parameters:
     - message (dict): The message response body from Twilio
 
@@ -262,7 +264,7 @@ def send_text_segments(segments):
             "text": f'{segment_label}"{segment}"{end_marker}',
         }
         send_to_groupme(data)
-        time.sleep(1) # Rate limit to prevent GroupMe API rate limiting
+        time.sleep(1)  # Rate limit to prevent GroupMe API rate limiting
 
 
 def send_images(images):
@@ -299,9 +301,7 @@ def send_to_groupme(body, bot_id=GROUPME_BOT_ID):
     """
     body["bot_id"] = bot_id
 
-    response = requests.post(
-        GROUPME_API, json=body, timeout=10
-    )
+    response = requests.post(GROUPME_API, json=body, timeout=10)
 
     if response.status_code in {200, 202}:
         logger.debug("Message Sent: %s", body.get("text", "Image"))
@@ -346,11 +346,31 @@ def callback(ch, method, _properties, body):
         logger.debug("Processing message from %s", sender_number)
 
         send_message_to_groupme(message)
+
+        # Now need to acknowledge the message both to the queue and to the sender
+        # Queue
         ch.basic_ack(delivery_tag=method.delivery_tag)
-        logger.debug("Message acknowledged: %s", message)
+
+        # Send acknowledgment back to wbor-twilio
+        ack_response = requests.post(
+            "http://wbor-twilio:5000/acknowledge",
+            json={"wbor_message_id": message["wbor_message_id"]},
+            timeout=3,
+        )
+        if ack_response.status_code == 200:
+            logger.info(
+                "Acknowledgment sent for message ID: %s", message["wbor_message_id"]
+            )
+        else:
+            logger.error(
+                "Failed to send acknowledgment for message ID: %s. Status: %s",
+                message["wbor_message_id"],
+                ack_response.status_code,
+            )
     except (json.JSONDecodeError, KeyError) as e:
         logger.error("Failed to execute callback: %s", e)
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+
 
 def consume_messages():
     """Consume messages from the RabbitMQ queue."""
