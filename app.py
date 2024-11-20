@@ -90,6 +90,8 @@ def sanitize_text(text, replacement="\uFFFD"):
     """
     if not isinstance(text, str):
         return text
+    
+    text.replace('\xa0', ' ') # Replace non-breaking space with regular spaces
     sanitized = "".join(char if char.isprintable() else replacement for char in text)
     return sanitized
 
@@ -192,7 +194,8 @@ def send_message_to_groupme(message):
                         "Check the message in Twilio logs for details.\n"
                         "---------\n"
                         "%s\n"
-                        "---------", uid
+                        "---------",
+                        uid,
                     )
                 }
             )
@@ -260,15 +263,21 @@ def send_text_segments(segments, uid):
     Returns:
     - None
     """
+    before_dash_split = uid.split("-", 1)[0]  # Get the first part of the UID
+
     total_segments = len(segments)
     for index, segment in enumerate(segments, start=1):
         segment_label = f"({index}/{total_segments}):\n" if total_segments > 1 else ""
-        end_marker = f"\n---------{uid}\n\n---------" if index == total_segments else ""
+        end_marker = (
+            f"\n---UID---\n{before_dash_split}\n---------"
+            if index == total_segments
+            else ""
+        )
         data = {
             "text": f'{segment_label}"{segment}"{end_marker}',
         }
         send_to_groupme(data)
-        time.sleep(1)  # Rate limit to prevent GroupMe API rate limiting
+        time.sleep(0.1)  # Rate limit to prevent GroupMe API rate limiting
 
 
 def send_images(images):
@@ -287,6 +296,7 @@ def send_images(images):
             "text": "",
         }
         send_to_groupme(image_data)
+        time.sleep(0.1)
 
 
 def send_to_groupme(body, bot_id=GROUPME_BOT_ID):
