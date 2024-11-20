@@ -3,9 +3,7 @@ GroupMe Handler.
 - Consumes messages from the RabbitMQ queue to forward to a GroupMe group chat.
 
 TO-DO:
-- Generalize to support other incoming message sources (not just Twilio)
 - Log GroupMe API calls in Postgres, including origination source (Twilio, etc.)
-    - Assign a unique ID to each message to prevent duplicates
 - Callback actions - block sender based on the message's UID
 """
 
@@ -113,10 +111,7 @@ class MessageUtils:
         # - U+2600 to U+26FF (miscellaneous symbols)
         # - U+2700 to U+27BF (dingbats)
         # - Additional ranges may exist
-        try:
-            return emoji.is_emoji(char)
-        except Exception:
-            return False
+        return emoji.is_emoji(char)
 
 
 class MessageSourceHandler:
@@ -404,8 +399,13 @@ class GroupMe:
             )
 
 
+# Define message handlers for each source
+# Each handler should implement the `process_message` method
+# These handlers are used to process messages from the RabbitMQ queue based on the routing key
 MESSAGE_HANDLERS = {"twilio": TwilioHandler()}
-SOURCES = {"twilio": "source.twilio"}
+
+# These are defined automatically based on the keys in MESSAGE_HANDLERS
+SOURCES = {key: f"source.{key}" for key in MESSAGE_HANDLERS}
 
 
 def callback(ch, method, _properties, body):
@@ -441,7 +441,6 @@ def callback(ch, method, _properties, body):
             message["Body"] = sanitized_body
 
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
-        logger.debug("Using handler: %s", handler)
         handler.process_message(message)
         ch.basic_ack(delivery_tag=method.delivery_tag)
     except (json.JSONDecodeError, KeyError) as e:
@@ -481,9 +480,16 @@ def consume_messages():
                     queue=queue_name,
                     routing_key=routing_key,
                 )
-                logger.debug("Queue %s bound to \"source_exchange\" with routing key %s", queue_name, routing_key)
+                logger.debug(
+                    'Queue %s bound to "source_exchange" with routing key %s',
+                    queue_name,
+                    routing_key,
+                )
                 channel.basic_consume(
-                    queue=queue_name, on_message_callback=callback, auto_ack=False, consumer_tag=f"{source}_consumer"
+                    queue=queue_name,
+                    on_message_callback=callback,
+                    auto_ack=False,
+                    consumer_tag=f"{source}_consumer",
                 )
 
             logger.info("Connected! Now ready to consume messages...")
