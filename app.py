@@ -6,10 +6,6 @@ TO-DO:
 - Generalize to support other incoming message sources (not just Twilio)
 - Log GroupMe API calls in Postgres, including origination source (Twilio, etc.)
     - Assign a unique ID to each message to prevent duplicates
-- Store and retry failed messages - use RabbitMQ dead-letter exchange
-- Queue messages to prevent rate limiting or unordered sending by GroupMe
-- Assign Twilio related functions to a separate module
-- Write class for GroupMe API calls
 - Callback actions - block sender based on the message's UID
 """
 
@@ -41,6 +37,7 @@ GROUPME_API = "https://api.groupme.com/v3/bots/post"
 GROUPME_IMAGE_API = "https://image.groupme.com/pictures"
 
 ACK_URL = "http://wbor-twilio:5000/acknowledge"
+
 
 # Logging
 logger = logging.getLogger(__name__)
@@ -77,30 +74,57 @@ if not GROUPME_BOT_ID or not GROUPME_ACCESS_TOKEN:
     sys.exit(1)
 
 
-def sanitize_text(string, replacement="\uFFFD"):
+class MessageUtils:
     """
-    Remove or replace unprintable characters from a string.
-
-    Parameters:
-    - text (str): The input string to sanitize.
-    - replacement (str): The character to use for replacement.
-        Default is the Unicode replacement character.
-
-    Returns:
-    - str: Sanitized text with unprintable characters replaced.
+    Common utility functions for message processing.
     """
-    if not isinstance(string, str):
-        return string
 
-    string.replace("\xa0", " ")  # Replace non-breaking space with regular spaces
-    sanitized = "".join(char if char.isprintable() else replacement for char in string)
-    return sanitized
+    @staticmethod
+    def sanitize_text(string, replacement="\uFFFD"):
+        """
+        Remove or replace unprintable characters from a string.
+
+        Parameters:
+        - text (str): The input string to sanitize.
+        - replacement (str): The character to use for replacement.
+            Default is the Unicode replacement character.
+
+        Returns:
+        - str: Sanitized text with unprintable characters replaced.
+        """
+        if not isinstance(string, str):
+            return string
+
+        string.replace("\xa0", " ")  # Replace non-breaking space with regular spaces
+        sanitized = "".join(
+            char if char.isprintable() else replacement for char in string
+        )
+        return sanitized
 
 
-class TwilioHandler:
+class MessageSourceHandler:
+    """
+    Base class for message source handlers.
+    """
+
+    def process_message(self, message):
+        raise NotImplementedError("This method should be implemented by subclasses.")
+
+
+class SlackHandler(MessageSourceHandler):
+    def process_message(self, message):
+        # Slack-specific processing
+        pass  # Implement Slack-specific logic
+
+
+class TwilioHandler(MessageSourceHandler):
     """
     Handles Twilio-specific message processing and forwarding.
     """
+
+    def process_message(self, message):
+        # Twilio-specific processing
+        self.send_message_to_groupme(message)
 
     @staticmethod
     def send_message_to_groupme(message):
@@ -131,14 +155,14 @@ class TwilioHandler:
 
             # Split the message into segments if it exceeds GroupMe's character limit
             if body:
-                segments = GroupMeHandler.split_message(body)
-                GroupMeHandler.send_text_segments(segments, uid)
+                segments = GroupMe.split_message(body)
+                GroupMe.send_text_segments(segments, uid)
 
             if images:
-                GroupMeHandler.send_images(images)
+                GroupMe.send_images(images)
 
             if unsupported_type:
-                GroupMeHandler.send_to_groupme(
+                GroupMe.send_to_groupme(
                     {
                         "text": (
                             "A media item was sent with an unsupported format.\n\n"
@@ -175,7 +199,7 @@ class TwilioHandler:
         for i in range(10):
             media_url_key = f"MediaUrl{i}"
             if media_url_key in message:
-                upload_response = GroupMeHandler.upload_image(message[media_url_key])
+                upload_response = GroupMe.upload_image(message[media_url_key])
                 if upload_response is not None:
                     image_url = upload_response.get("payload", {}).get("url")
                     if image_url:
@@ -186,7 +210,7 @@ class TwilioHandler:
         return images, unsupported_type
 
 
-class GroupMeHandler:
+class GroupMe:
     """
     Handles GroupMe-specific message sending and processing.
     """
@@ -292,7 +316,7 @@ class GroupMeHandler:
             data = {
                 "text": f'{segment_label}"{segment}"{end_marker}',
             }
-            GroupMeHandler.send_to_groupme(data)
+            GroupMe.send_to_groupme(data)
             time.sleep(0.1)  # Rate limit to prevent GroupMe API rate limiting
 
     @staticmethod
@@ -312,7 +336,7 @@ class GroupMeHandler:
                 "picture_url": image_url,
                 "text": "",
             }
-            GroupMeHandler.send_to_groupme(image_data)
+            GroupMe.send_to_groupme(image_data)
             time.sleep(0.1)
 
     @staticmethod
@@ -343,6 +367,9 @@ class GroupMeHandler:
             )
 
 
+MESSAGE_HANDLERS = {"twilio": TwilioHandler()}
+
+
 def callback(ch, method, _properties, body):
     """
     Callback function to process messages from the RabbitMQ queue.
@@ -365,7 +392,7 @@ def callback(ch, method, _properties, body):
 
         if "Body" in message:
             original_body = message["Body"]
-            sanitized_body = sanitize_text(original_body)
+            sanitized_body = MessageUtils.sanitize_text(original_body)
             if original_body != sanitized_body:
                 logger.warning(
                     "Sanitized unprintable characters in message body: %s -> %s",
