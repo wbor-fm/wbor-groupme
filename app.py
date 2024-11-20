@@ -500,11 +500,55 @@ def consume_messages():
             time.sleep(5)
 
 
+def parse_command(text):
+    """
+    Parse a command from a GroupMe message.
+
+    Parameters:
+    - text (str): The message text to parse
+
+    Returns:
+    - None
+    """
+    if text.startswith("!"):
+        command = text.split(" ")[0].lower()
+        if command == "!help":
+            GroupMe.send_to_groupme(
+                {
+                    "text": (
+                        "Available commands:\n"
+                        "!help - Display this help message\n"
+                        "!ping - Check if the bot is online\n"
+                        "!ban <UID> - Ban a phone number from sending messages\n"
+                        "!stats <UID> - Display message statistics for a phone number"
+                    )
+                }
+            )
+        elif command == "!ping":
+            GroupMe.send_to_groupme({"text": "Pong!"})
+        elif command == "!ban":
+            # TO-DO: Implement ban functionality
+            GroupMe.send_to_groupme(
+                {"text": "Ban functionality is not yet implemented."}
+            )
+        elif command == "!stats":
+            # TO-DO: Implement stats functionality
+            GroupMe.send_to_groupme(
+                {
+                    "text": "Stats functionality is not yet implemented. This will include information such as the number of messages sent by a phone number."
+                }
+            )
+
+
 @app.route("/callback", methods=["POST"])
 def groupme_callback():
     """Callback endpoint for GroupMe API."""
-    logger.info("GroupMe callback received: %s", request.json)
+    body = request.json
+    logger.info("GroupMe callback received: %s", body)
+    text = body.get("text")
+    parse_command(text)
     return "OK"
+
 
 @app.route("/")
 def hello_world():
