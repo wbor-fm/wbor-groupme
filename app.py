@@ -10,7 +10,6 @@ TO-DO:
 - Queue messages to prevent rate limiting or unordered sending by GroupMe
 - Assign Twilio related functions to a separate module
 - Write class for GroupMe API calls
-- Add unique message ID to GroupMe messages
 - Callback actions - block sender based on the message's UID
 """
 
@@ -40,6 +39,8 @@ GROUPME_CHARACTER_LIMIT = abs(int(os.getenv("GROUPME_CHARACTER_LIMIT", "900")))
 
 GROUPME_API = "https://api.groupme.com/v3/bots/post"
 GROUPME_IMAGE_API = "https://image.groupme.com/pictures"
+
+ACK_URL = "http://wbor-twilio:5000/acknowledge"
 
 # Logging
 logger = logging.getLogger(__name__)
@@ -76,9 +77,9 @@ if not GROUPME_BOT_ID or not GROUPME_ACCESS_TOKEN:
     sys.exit(1)
 
 
-def sanitize_text(text, replacement="\uFFFD"):
+def sanitize_text(string, replacement="\uFFFD"):
     """
-    Remove or replace unprintable characters from the text.
+    Remove or replace unprintable characters from a string.
 
     Parameters:
     - text (str): The input string to sanitize.
@@ -88,241 +89,258 @@ def sanitize_text(text, replacement="\uFFFD"):
     Returns:
     - str: Sanitized text with unprintable characters replaced.
     """
-    if not isinstance(text, str):
-        return text
-    
-    text.replace('\xa0', ' ') # Replace non-breaking space with regular spaces
-    sanitized = "".join(char if char.isprintable() else replacement for char in text)
+    if not isinstance(string, str):
+        return string
+
+    string.replace("\xa0", " ")  # Replace non-breaking space with regular spaces
+    sanitized = "".join(char if char.isprintable() else replacement for char in string)
     return sanitized
 
 
-def upload_image(image_url):
+class TwilioHandler:
     """
-    Upload an image to GroupMe's image service.
-
-    Parameters:
-    - image_url (str): The URL of the image to upload
-
-    Returns:
-    - dict: The JSON response from the GroupMe API, including the GroupMe image URL
-    - None: If the upload fails
-
-    Throws:
-    - ValueError: If the image file type is unsupported
-    - Exception: If the image fails to download from Twilio
+    Handles Twilio-specific message processing and forwarding.
     """
-    mime_types = {
-        "image/gif": ".gif",
-        "image/jpeg": ".jpeg",
-        "image/png": ".png",
-    }
 
-    # Download the image from a URL (in this case, Twilio's MediaUrl)
-    image_response = requests.get(image_url, stream=True, timeout=10)
-    if image_response.status_code != 200:
-        raise requests.exceptions.RequestException(
-            f"Failed to download image from {image_url}: \
-            {image_response.status_code}"
-        )
+    @staticmethod
+    def send_message_to_groupme(message):
+        """
+        Primary handler!
 
-    content_type = image_response.headers.get("Content-Type", "").lower()
-    file_extension = mime_types.get(content_type)
+        Send a text message with optional images to GroupMe.
 
-    if not file_extension:
-        logger.warning(
-            "Unsupported content type `%s`. Must be one of: image/gif, image/jpeg, image/png",
-            content_type,
-        )
-        return None
+        This entire process should take no longer than 5 seconds to complete.
 
-    headers = {
-        "X-Access-Token": GROUPME_ACCESS_TOKEN,
-        "Content-Type": content_type,
-    }
+        Parameters:
+        - message (dict): The message response body from Twilio
 
-    # Upload the downloaded image to GroupMe
-    response = requests.post(
-        GROUPME_IMAGE_API, headers=headers, data=image_response.content, timeout=10
-    )
+        Returns:
+        - None
 
-    if response.status_code == 200:
-        logger.debug("Upload successful: %s", response.json())
-        return response.json()
-    logger.warning("Upload failed: %s - %s", response.status_code, response.text)
-    return None
+        Throws:
+        - requests.exceptions.RequestException: If the HTTP request fails
+        - KeyError: If the message body is missing
+        """
+        try:
+            body = message.get("Body")
+            uid = message.get("wbor_message_id")
+            logger.debug("Sending message %s: %s", uid, body)
+
+            # Extract images from the message and upload them to GroupMe
+            images, unsupported_type = TwilioHandler.extract_images(message)
+
+            # Split the message into segments if it exceeds GroupMe's character limit
+            if body:
+                segments = GroupMeHandler.split_message(body)
+                GroupMeHandler.send_text_segments(segments, uid)
+
+            if images:
+                GroupMeHandler.send_images(images)
+
+            if unsupported_type:
+                GroupMeHandler.send_to_groupme(
+                    {
+                        "text": (
+                            "A media item was sent with an unsupported format.\n\n"
+                            "Check the message in Twilio logs for details.\n"
+                            "---------\n"
+                            "%s\n"
+                            "---------",
+                            uid,
+                        )
+                    }
+                )
+
+        except (requests.exceptions.RequestException, KeyError) as e:
+            logger.error("Failed to send message: %s", e)
+
+    @staticmethod
+    def extract_images(message):
+        """
+        Extract image URLs from the message response body and upload them to GroupMe's image service
+
+        Assumes that only up to 10 images are present in the original message.
+        (which is what Twilio supports)
+
+        Parameters:
+        - message (dict): The message response body from Twilio
+
+        Returns:
+        - images (list): A list of image URLs from GroupMe's image service
+        - unsupported_type (bool): True if an unsupported media type was found, False otherwise
+        """
+        unsupported_type = False
+
+        images = []
+        for i in range(10):
+            media_url_key = f"MediaUrl{i}"
+            if media_url_key in message:
+                upload_response = GroupMeHandler.upload_image(message[media_url_key])
+                if upload_response is not None:
+                    image_url = upload_response.get("payload", {}).get("url")
+                    if image_url:
+                        images.append(image_url)
+                else:
+                    logger.warning("Failed to upload media: %s", message[media_url_key])
+                    unsupported_type = True
+        return images, unsupported_type
 
 
-def send_message_to_groupme(message):
+class GroupMeHandler:
     """
-    Primary handler!
-
-    Send a message with optional images to GroupMe.
-
-    This entire process should take no longer than 5 seconds to complete.
-
-    Parameters:
-    - message (dict): The message response body from Twilio
-
-    Returns:
-    - None
-
-    Throws:
-    - requests.exceptions.RequestException: If the HTTP request fails
-    - KeyError: If the message body is missing
+    Handles GroupMe-specific message sending and processing.
     """
-    try:
-        body = message.get("Body")
-        uid = message.get("wbor_message_id")
-        logger.debug("Sending message %s: %s", uid, body)
 
-        # Extract images from the message and upload them to GroupMe
-        images, unsupported_type = extract_images(message)
+    @staticmethod
+    def upload_image(image_url):
+        """
+        Upload an image to GroupMe's image service.
 
-        # Split the message into segments if it exceeds GroupMe's character limit
-        if body:
-            segments = split_message(body)
-            send_text_segments(segments, uid)
+        Parameters:
+        - image_url (str): The URL of the image to upload
 
-        if images:
-            send_images(images)
+        Returns:
+        - dict: The JSON response from the GroupMe API, including the GroupMe image URL
+        - None: If the upload fails
 
-        if unsupported_type:
-            send_to_groupme(
-                {
-                    "text": (
-                        "A media item was sent with an unsupported format.\n\n"
-                        "Check the message in Twilio logs for details.\n"
-                        "---------\n"
-                        "%s\n"
-                        "---------",
-                        uid,
-                    )
-                }
+        Throws:
+        - ValueError: If the image file type is unsupported
+        - Exception: If the image fails to download from Twilio
+        """
+        mime_types = {
+            "image/gif": ".gif",
+            "image/jpeg": ".jpeg",
+            "image/png": ".png",
+        }
+
+        # Download the image from a URL (in this case, Twilio's MediaUrl)
+        image_response = requests.get(image_url, stream=True, timeout=10)
+        if image_response.status_code != 200:
+            raise requests.exceptions.RequestException(
+                f"Failed to download image from {image_url}: \
+                {image_response.status_code}"
             )
 
-    except (requests.exceptions.RequestException, KeyError) as e:
-        logger.error("Failed to send message: %s", e)
+        content_type = image_response.headers.get("Content-Type", "").lower()
+        file_extension = mime_types.get(content_type)
 
+        if not file_extension:
+            logger.warning(
+                "Unsupported content type `%s`. Must be one of: image/gif, image/jpeg, image/png",
+                content_type,
+            )
+            return None
 
-def extract_images(message):
-    """
-    Extract image URLs from the message response body and upload them to GroupMe's image service.
-
-    Assumes that only up to 10 images are present in the original message.
-    (which is what Twilio supports)
-
-    Parameters:
-    - message (dict): The message response body from Twilio
-
-    Returns:
-    - list: A list of image URLs from GroupMe's image service
-    """
-    unsupported_type = False
-
-    images = []
-    for i in range(10):
-        media_url_key = f"MediaUrl{i}"
-        if media_url_key in message:
-            upload_response = upload_image(message[media_url_key])
-            if upload_response is not None:
-                image_url = upload_response.get("payload", {}).get("url")
-                if image_url:
-                    images.append(image_url)
-            else:
-                logger.warning("Failed to upload media: %s", message[media_url_key])
-                unsupported_type = True
-    return images, unsupported_type
-
-
-def split_message(body):
-    """
-    Split the message body text if it exceeds GroupMe's character limit.
-
-    Parameters:
-    - body (str): The message body text
-
-    Returns:
-    - list: A list of message segment strings
-    """
-    segments = [
-        body[i : i + GROUPME_CHARACTER_LIMIT]
-        for i in range(0, len(body), GROUPME_CHARACTER_LIMIT)
-    ]
-    return segments
-
-
-def send_text_segments(segments, uid):
-    """
-    Send each text segment to GroupMe.
-    Pre-process the text to include segment labels (if applicable) and an end marker.
-
-    Parameters:
-    - segments (list): A list of message segment strings
-    - uid (str): The unique message ID
-
-    Returns:
-    - None
-    """
-    before_dash_split = uid.split("-", 1)[0]  # Get the first part of the UID
-
-    total_segments = len(segments)
-    for index, segment in enumerate(segments, start=1):
-        segment_label = f"({index}/{total_segments}):\n" if total_segments > 1 else ""
-        end_marker = (
-            f"\n---UID---\n{before_dash_split}\n---------"
-            if index == total_segments
-            else ""
-        )
-        data = {
-            "text": f'{segment_label}"{segment}"{end_marker}',
+        headers = {
+            "X-Access-Token": GROUPME_ACCESS_TOKEN,
+            "Content-Type": content_type,
         }
-        send_to_groupme(data)
-        time.sleep(0.1)  # Rate limit to prevent GroupMe API rate limiting
 
-
-def send_images(images):
-    """
-    Send images to GroupMe if any are present.
-
-    Parameters:
-    - images (list): A list of image URLs from GroupMe's image service
-
-    Returns:
-    - None
-    """
-    for image_url in images:
-        image_data = {
-            "picture_url": image_url,
-            "text": "",
-        }
-        send_to_groupme(image_data)
-        time.sleep(0.1)
-
-
-def send_to_groupme(body, bot_id=GROUPME_BOT_ID):
-    """
-    Make the actual HTTP POST request to GroupMe API and log the response.
-
-    Parameters:
-    - body (dict): The message body to send
-    - bot_id (str): The GroupMe bot ID
-
-    Returns:
-    - None
-
-    Throws:
-    - requests.exceptions.RequestException: If the HTTP POST request fails
-    """
-    body["bot_id"] = bot_id
-
-    response = requests.post(GROUPME_API, json=body, timeout=10)
-
-    if response.status_code in {200, 202}:
-        logger.debug("Message Sent: %s", body.get("text", "Image"))
-    else:
-        logger.error(
-            "Failed to send message: %s - %s", response.status_code, response.text
+        # Upload the downloaded image to GroupMe
+        response = requests.post(
+            GROUPME_IMAGE_API, headers=headers, data=image_response.content, timeout=10
         )
+
+        if response.status_code == 200:
+            logger.debug("Upload successful: %s", response.json())
+            return response.json()
+        logger.warning("Upload failed: %s - %s", response.status_code, response.text)
+        return None
+
+    @staticmethod
+    def split_message(body):
+        """
+        Split a message body string if it exceeds GroupMe's character limit.
+
+        Parameters:
+        - body (str): The message string
+
+        Returns:
+        - list: A list of message segment strings
+        """
+        segments = [
+            body[i : i + GROUPME_CHARACTER_LIMIT]
+            for i in range(0, len(body), GROUPME_CHARACTER_LIMIT)
+        ]
+        return segments
+
+    @staticmethod
+    def send_text_segments(segments, uid):
+        """
+        Send each text segment to GroupMe.
+        Pre-process the text to include segment labels (if applicable) and an end marker.
+
+        Parameters:
+        - segments (list): A list of message segment strings
+        - uid (str): The unique message ID (generated by message originator)
+
+        Returns:
+        - None
+        """
+        before_dash_split = uid.split("-", 1)[0]  # Get the first part of the UID
+
+        total_segments = len(segments)
+        for index, segment in enumerate(segments, start=1):
+            segment_label = (
+                f"({index}/{total_segments}):\n" if total_segments > 1 else ""
+            )
+            end_marker = (
+                f"\n---UID---\n{before_dash_split}\n---------"
+                if index == total_segments
+                else ""
+            )
+            data = {
+                "text": f'{segment_label}"{segment}"{end_marker}',
+            }
+            GroupMeHandler.send_to_groupme(data)
+            time.sleep(0.1)  # Rate limit to prevent GroupMe API rate limiting
+
+    @staticmethod
+    def send_images(images):
+        """
+        Send images to GroupMe if any are present.
+
+        Parameters:
+        - images (list): A list of image URLs from GroupMe's image service
+
+        Returns:
+        - None
+        """
+        for image_url in images:
+            # Construct body for image sending
+            image_data = {
+                "picture_url": image_url,
+                "text": "",
+            }
+            GroupMeHandler.send_to_groupme(image_data)
+            time.sleep(0.1)
+
+    @staticmethod
+    def send_to_groupme(body, bot_id=GROUPME_BOT_ID):
+        """
+        Make the actual HTTP POST request to GroupMe API and log the response.
+
+        Parameters:
+        - body (dict): The message body to send.
+            Assumes it is constructed, only needs the bot ID.
+        - bot_id (str): The GroupMe bot ID from the group to send the message to
+
+        Returns:
+        - None
+
+        Throws:
+        - requests.exceptions.RequestException: If the HTTP POST request fails
+        """
+        body["bot_id"] = bot_id
+
+        response = requests.post(GROUPME_API, json=body, timeout=10)
+
+        if response.status_code in {200, 202}:
+            logger.debug("Message Sent: %s", body.get("text", "Image"))
+        else:
+            logger.error(
+                "Failed to send message: %s - %s", response.status_code, response.text
+            )
 
 
 def callback(ch, method, _properties, body):
@@ -359,15 +377,18 @@ def callback(ch, method, _properties, body):
         sender_number = message.get("From")
         logger.debug("Processing message from %s", sender_number)
 
-        send_message_to_groupme(message)
+        # As of now, only Twilio messages are supported.
+        # The follow logic will be generalized later to other originators.
+
+        TwilioHandler.send_message_to_groupme(message)
 
         # Now need to acknowledge the message both to the queue and to the sender
-        # Queue
+        # Rabbit Queue
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
-        # Send acknowledgment back to wbor-twilio
+        # Send acknowledgment back to wbor-twilio (the sender)
         ack_response = requests.post(
-            "http://wbor-twilio:5000/acknowledge",
+            ACK_URL,
             json={"wbor_message_id": message["wbor_message_id"]},
             timeout=3,
         )
