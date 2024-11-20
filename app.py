@@ -19,6 +19,7 @@ import requests
 import pika
 import pika.exceptions
 import pytz
+import emoji
 from flask import Flask
 from dotenv import load_dotenv
 
@@ -80,7 +81,7 @@ class MessageUtils:
     """
 
     @staticmethod
-    def sanitize_text(string, replacement="\uFFFD"):
+    def sanitize_string(string, replacement="\uFFFD"):
         """
         Remove or replace unprintable characters from a string.
 
@@ -97,9 +98,25 @@ class MessageUtils:
 
         string.replace("\xa0", " ")  # Replace non-breaking space with regular spaces
         sanitized = "".join(
-            char if char.isprintable() else replacement for char in string
+            char if char.isprintable() or MessageUtils.is_emoji(char) else replacement
+            for char in string
         )
         return sanitized
+
+    @staticmethod
+    def is_emoji(char):
+        """Check if a character is an emoji."""
+        # Emojis are generally in the Unicode ranges:
+        # - U+1F600 to U+1F64F (emoticons)
+        # - U+1F300 to U+1F5FF (symbols & pictographs)
+        # - U+1F680 to U+1F6FF (transport & map symbols)
+        # - U+2600 to U+26FF (miscellaneous symbols)
+        # - U+2700 to U+27BF (dingbats)
+        # - Additional ranges may exist
+        try:
+            return emoji.is_emoji(char)
+        except Exception:
+            return False
 
 
 class MessageSourceHandler:
@@ -108,13 +125,10 @@ class MessageSourceHandler:
     """
 
     def process_message(self, message):
+        """
+        Logic to process a message from the source.
+        """
         raise NotImplementedError("This method should be implemented by subclasses.")
-
-
-class SlackHandler(MessageSourceHandler):
-    def process_message(self, message):
-        # Slack-specific processing
-        pass  # Implement Slack-specific logic
 
 
 class TwilioHandler(MessageSourceHandler):
@@ -392,7 +406,7 @@ def callback(ch, method, _properties, body):
 
         if "Body" in message:
             original_body = message["Body"]
-            sanitized_body = MessageUtils.sanitize_text(original_body)
+            sanitized_body = MessageUtils.sanitize_string(original_body)
             if original_body != sanitized_body:
                 logger.warning(
                     "Sanitized unprintable characters in message body: %s -> %s",
