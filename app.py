@@ -495,6 +495,5 @@ def hello_world():
 
 
 if __name__ == "__main__":
-    logger.info("Starting Flask app and RabbitMQ consumer...")
     consume_messages()
     app.run(host="0.0.0.0", port=APP_PORT)
