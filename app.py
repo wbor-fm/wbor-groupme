@@ -4,7 +4,10 @@ GroupMe Handler.
 
 TO-DO:
 - Log GroupMe API calls in Postgres, including origination source (Twilio, etc.)
+    - Requires to first generalize Postgres insertion logic to multiple sources
 - Callback actions - block sender based on the message's UID
+    - Implement message statistics tracking and retrieval
+    - Implement message banning/unbanning
 """
 
 import os
@@ -512,14 +515,16 @@ def parse_command(text):
     """
     if text.startswith("!"):
         command = text.split(" ")[0].lower()
+        uid = text.split(" ")[1]
         if command == "!help":
             GroupMe.send_to_groupme(
                 {
                     "text": (
-                        "Available commands:\n"
-                        "!help - Display this help message\n"
-                        "!ping - Check if the bot is online\n"
-                        "!ban <UID> - Ban a phone number from sending messages\n"
+                        "Available commands:\n\n"
+                        "!help - Display this help message\n\n"
+                        "!ping - Check if the bot is online\n\n"
+                        "!ban <UID> - Ban a phone number from sending messages\n\n"
+                        "!unban <UID> - Unban a phone number from sending messages\n\n"
                         "!stats <UID> - Display message statistics for a phone number"
                     )
                 }
@@ -529,13 +534,49 @@ def parse_command(text):
         elif command == "!ban":
             # TO-DO: Implement ban functionality
             GroupMe.send_to_groupme(
-                {"text": "Ban functionality is not yet implemented."}
+                {
+                    "text": "Ban functionality is not yet implemented. This will block a phone number from sending messages to the station."
+                }
             )
+
+            # if ban(uid):
+            #     GroupMe.send_to_groupme(
+            #         {
+            #             "text": f"Phone number associated with message UID {uid} has been banned from sending messages."
+            #         }
+            #     )
+        elif command == "!unban":
+            # TO-DO: Implement unban functionality
+            GroupMe.send_to_groupme(
+                {
+                    "text": "Unan functionality is not yet implemented. This will unblock a phone number from sending messages to the station."
+                }
+            )
+
+            # if unban(uid):
+            #     GroupMe.send_to_groupme(
+            #         {
+            #             "text": f"Phone number associated with message UID {uid} has been unbanned from sending messages."
+            #         }
+            #     )
+
         elif command == "!stats":
             # TO-DO: Implement stats functionality
             GroupMe.send_to_groupme(
                 {
                     "text": "Stats functionality is not yet implemented. This will include information such as the number of messages sent by a phone number."
+                }
+            )
+
+            # stats = get_stats(uid)
+            # send_stats(stats)
+        else:
+            GroupMe.send_to_groupme(
+                {
+                    "text": (
+                        "Unknown command.\n\n"
+                        "Type `!help` to see a list of available commands."
+                    )
                 }
             )
 
