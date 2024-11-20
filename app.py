@@ -143,7 +143,9 @@ class TwilioHandler(MessageSourceHandler):
         logger.debug("Processing Twilio message: %s", message)
         self.send_message_to_groupme(message)
 
-        logger.debug("Sending acknowledgment for message ID: %s", message["wbor_message_id"])
+        logger.debug(
+            "Sending acknowledgment for message ID: %s", message["wbor_message_id"]
+        )
         # Send acknowledgment back to wbor-twilio (the sender)
         ack_response = requests.post(
             ACK_URL,
@@ -473,13 +475,15 @@ def consume_messages():
             for source, routing_key in SOURCES.items():
                 queue_name = f"{source}"
                 channel.queue_declare(queue=queue_name, durable=True)
+                logger.debug("Queue declared: %s", queue_name)
                 channel.queue_bind(
                     exchange="source_exchange",
                     queue=queue_name,
                     routing_key=routing_key,
                 )
+                logger.debug("Queue %s bound to \"source_exchange\" with routing key %s", queue_name, routing_key)
                 channel.basic_consume(
-                    queue=queue_name, on_message_callback=callback, auto_ack=False
+                    queue=queue_name, on_message_callback=callback, auto_ack=False, consumer_tag=f"{source}_consumer"
                 )
 
             logger.info("Connected! Now ready to consume messages...")
