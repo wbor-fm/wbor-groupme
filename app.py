@@ -18,7 +18,7 @@ import pika
 import pika.exceptions
 import pytz
 import emoji
-from flask import Flask
+from flask import Flask, request
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -465,7 +465,7 @@ def consume_messages():
             connection = pika.BlockingConnection(parameters)
             channel = connection.channel()
 
-            # Declare the exchange
+            # Assert the exchange exists
             channel.exchange_declare(
                 exchange="source_exchange", exchange_type="topic", durable=True
             )
@@ -499,6 +499,12 @@ def consume_messages():
             logger.info("Retrying in 5 seconds...")
             time.sleep(5)
 
+
+@app.route("/callback", methods=["POST"])
+def groupme_callback():
+    """Callback endpoint for GroupMe API."""
+    logger.info("GroupMe callback received: %s", request.json)
+    return "OK"
 
 @app.route("/")
 def hello_world():
