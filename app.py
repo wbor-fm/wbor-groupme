@@ -137,8 +137,28 @@ class TwilioHandler(MessageSourceHandler):
     """
 
     def process_message(self, message):
-        # Twilio-specific processing
+        """
+        Process a text message from Twilio.
+        """
+
         self.send_message_to_groupme(message)
+
+        # Send acknowledgment back to wbor-twilio (the sender)
+        ack_response = requests.post(
+            ACK_URL,
+            json={"wbor_message_id": message["wbor_message_id"]},
+            timeout=3,
+        )
+        if ack_response.status_code == 200:
+            logger.info(
+                "Acknowledgment sent for message ID: %s", message["wbor_message_id"]
+            )
+        else:
+            logger.error(
+                "Acknowledgment failed for message ID: %s. Status: %s",
+                message["wbor_message_id"],
+                ack_response.status_code,
+            )
 
     @staticmethod
     def send_message_to_groupme(message):
@@ -382,6 +402,7 @@ class GroupMe:
 
 
 MESSAGE_HANDLERS = {"twilio": TwilioHandler()}
+SOURCES = {"twilio": "source.twilio"}
 
 
 def callback(ch, method, _properties, body):
@@ -402,7 +423,8 @@ def callback(ch, method, _properties, body):
 
     try:
         message = json.loads(body)
-        logger.debug("Received message: %s", message)
+        sender_number = message.get("From")
+        logger.debug("Processing message from %s: %s", sender_number, message)
 
         if "Body" in message:
             original_body = message["Body"]
@@ -415,34 +437,9 @@ def callback(ch, method, _properties, body):
                 )
             message["Body"] = sanitized_body
 
-        sender_number = message.get("From")
-        logger.debug("Processing message from %s", sender_number)
-
-        # As of now, only Twilio messages are supported.
-        # The follow logic will be generalized later to other originators.
-
-        TwilioHandler.send_message_to_groupme(message)
-
-        # Now need to acknowledge the message both to the queue and to the sender
-        # Rabbit Queue
+        handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
+        handler.process_message(message)
         ch.basic_ack(delivery_tag=method.delivery_tag)
-
-        # Send acknowledgment back to wbor-twilio (the sender)
-        ack_response = requests.post(
-            ACK_URL,
-            json={"wbor_message_id": message["wbor_message_id"]},
-            timeout=3,
-        )
-        if ack_response.status_code == 200:
-            logger.info(
-                "Acknowledgment sent for message ID: %s", message["wbor_message_id"]
-            )
-        else:
-            logger.error(
-                "Acknowledgment failed for message ID: %s. Status: %s",
-                message["wbor_message_id"],
-                ack_response.status_code,
-            )
     except (json.JSONDecodeError, KeyError) as e:
         logger.error("Failed to execute callback: %s", e)
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
@@ -464,10 +461,25 @@ def consume_messages():
         try:
             connection = pika.BlockingConnection(parameters)
             channel = connection.channel()
-            channel.queue_declare(queue=GROUPME_QUEUE, durable=True)
-            channel.basic_consume(
-                queue=GROUPME_QUEUE, on_message_callback=callback, auto_ack=False
+
+            # Declare the exchange
+            channel.exchange_declare(
+                exchange="source_exchange", exchange_type="topic", durable=True
             )
+
+            # Declare and bind queues dynamically
+            for source, routing_key in SOURCES.items():
+                queue_name = f"{source}_queue"
+                channel.queue_declare(queue=queue_name, durable=True)
+                channel.queue_bind(
+                    exchange="source_exchange",
+                    queue=queue_name,
+                    routing_key=routing_key,
+                )
+                channel.basic_consume(
+                    queue=queue_name, on_message_callback=callback, auto_ack=False
+                )
+
             logger.info("Now ready to consume messages.")
             channel.start_consuming()
         except pika.exceptions.AMQPConnectionError as e:
