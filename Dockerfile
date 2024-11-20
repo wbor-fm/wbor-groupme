@@ -15,5 +15,5 @@ COPY . .
 # Expose the Flask app port
 EXPOSE 2000
 
-# Start Flask app with Gunicorn on port 3000, with 4 worker processes
-CMD ["gunicorn", "--workers", "4", "--bind", "0.0.0.0:2000", "app:app", "-c", "gunicorn_config.py"]
+
+CMD ["gunicorn", "--workers", "1", "--bind", "0.0.0.0:2000", "app:app", "-c", "gunicorn_config.py"]
