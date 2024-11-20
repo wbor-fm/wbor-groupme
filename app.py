@@ -140,9 +140,10 @@ class TwilioHandler(MessageSourceHandler):
         """
         Process a text message from Twilio.
         """
-
+        logger.debug("Processing Twilio message: %s", message)
         self.send_message_to_groupme(message)
 
+        logger.debug("Sending acknowledgment for message ID: %s", message["wbor_message_id"])
         # Send acknowledgment back to wbor-twilio (the sender)
         ack_response = requests.post(
             ACK_URL,
@@ -438,6 +439,7 @@ def callback(ch, method, _properties, body):
             message["Body"] = sanitized_body
 
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
+        logger.debug("Using handler: %s", handler)
         handler.process_message(message)
         ch.basic_ack(delivery_tag=method.delivery_tag)
     except (json.JSONDecodeError, KeyError) as e:
@@ -469,7 +471,7 @@ def consume_messages():
 
             # Declare and bind queues dynamically
             for source, routing_key in SOURCES.items():
-                queue_name = f"{source}_queue"
+                queue_name = f"{source}"
                 channel.queue_declare(queue=queue_name, durable=True)
                 channel.queue_bind(
                     exchange="source_exchange",
@@ -480,7 +482,7 @@ def consume_messages():
                     queue=queue_name, on_message_callback=callback, auto_ack=False
                 )
 
-            logger.info("Now ready to consume messages.")
+            logger.info("Connected! Now ready to consume messages...")
             channel.start_consuming()
         except pika.exceptions.AMQPConnectionError as e:
             logger.error("Failed to connect to RabbitMQ: %s", e)
