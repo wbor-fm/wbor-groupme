@@ -97,7 +97,9 @@ class MessageUtils:
         if not isinstance(string, str):
             return string
 
-        string.replace("\xa0", " ")  # Replace non-breaking space with regular spaces
+        string = string.replace(
+            "\xa0", " "
+        )  # Replace non-breaking space with regular spaces
         sanitized = "".join(
             char if char.isprintable() or MessageUtils.is_emoji(char) else replacement
             for char in string
