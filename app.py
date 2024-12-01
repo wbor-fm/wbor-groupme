@@ -575,6 +575,10 @@ def callback(ch, method, _properties, body):
     - Sanitize the message body
     - Process the message using the appropriate handler
 
+    TODO:
+    - Logic based on key - currently just checking for "sms.incoming" but other sources
+      will need different keys
+
     Parameters:
     - body: The message body
 
