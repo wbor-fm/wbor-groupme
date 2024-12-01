@@ -153,22 +153,20 @@ class TwilioHandler(MessageSourceHandler):
         """
         Process a text message from Twilio.
         """
-        logger.debug("Twilio `process_message` called for: %s", message.get("wbor_message_id"))
+        logger.debug(
+            "Twilio `process_message` called for: %s", message.get("wbor_message_id")
+        )
         self.send_message_to_groupme(message)
 
         # Send acknowledgment back to wbor-twilio (the sender)
-        logger.debug(
-            "Sending acknowledgment for UID: %s", message["wbor_message_id"]
-        )
+        logger.debug("Sending acknowledgment for UID: %s", message["wbor_message_id"])
         ack_response = requests.post(
             ACK_URL,
             json={"wbor_message_id": message["wbor_message_id"]},
             timeout=3,
         )
         if ack_response.status_code == 200:
-            logger.info(
-                "Acknowledgment sent for UID: %s", message["wbor_message_id"]
-            )
+            logger.info("Acknowledgment sent for UID: %s", message["wbor_message_id"])
         else:
             logger.error(
                 "Acknowledgment failed for UID: %s. Status: %s",
@@ -678,7 +676,7 @@ def groupme_callback():
         logger.info("GroupMe callback received: %s", body)
         text = body.get("text")
         parse_command(text)
-        return "OK"
+    return "OK"
 
 
 @app.route("/send", methods=["POST"])
