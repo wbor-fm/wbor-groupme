@@ -29,6 +29,8 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 APP_PORT = os.getenv("APP_PORT", "2000")
+APP_PASSWORD = os.getenv("APP_PASSWORD")
+
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "wbor-rabbitmq")
 RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "guest")
@@ -574,7 +576,7 @@ def consume_messages():
                     routing_key=routing_key,
                 )
                 logger.debug(
-                    'Queue %s bound to "source_exchange" with routing key %s',
+                    'Queue "%s" bound to "source_exchange" with routing key %s',
                     queue_name,
                     routing_key,
                 )
@@ -849,7 +851,7 @@ def send_message():
     logger.info("Send callback received: %s", body)
 
     # Check for password
-    if body.get("password") != os.getenv("SEND_PASSWORD"):
+    if body.get("password") != APP_PASSWORD:
         return "Unauthorized"
 
     # Check for required fields
