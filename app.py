@@ -604,7 +604,7 @@ def callback(ch, method, _properties, body):
 
         if (
             not message.get("type") == "sms.incoming"
-            or not message.get("source") == "standard"
+            and not message.get("source") == "standard"
         ):
             logger.debug("message.type: %s", message.get("type"))
             logger.debug("message.source: %s", message.get("source"))
@@ -627,6 +627,10 @@ def callback(ch, method, _properties, body):
                 message["Body"] = sanitized_body
             else:
                 message["body"] = sanitized_body
+
+        # Check for UID
+        if not message.get("wbor_message_id"):
+            message["wbor_message_id"] = MessageUtils.gen_uuid()
 
         logger.debug("Using handler query: %s", method.routing_key.split(".")[1])
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
