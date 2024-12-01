@@ -372,16 +372,23 @@ class GroupMe:
 
             # Upload the downloaded image to GroupMe
             response = requests.post(
-                GROUPME_IMAGE_API, headers=headers, data=image_response.content, timeout=10
+                GROUPME_IMAGE_API,
+                headers=headers,
+                data=image_response.content,
+                timeout=10,
             )
 
             if response.status_code == 200:
                 logger.debug("Upload successful: %s", response.json())
                 return response.json()
-            logger.warning("Upload failed: %s - %s", response.status_code, response.text)
+            logger.warning(
+                "Upload failed: %s - %s", response.status_code, response.text
+            )
             return None
         except requests.exceptions.RequestException as e:
-            logger.error("Exception occurred while processing image %s: %s", image_url, e)
+            logger.error(
+                "Exception occurred while processing image %s: %s", image_url, e
+            )
             return None
 
     @staticmethod
@@ -473,9 +480,10 @@ class GroupMe:
         response = requests.post(GROUPME_API, json=body, timeout=10)
 
         if response.status_code in {200, 202}:
-            logger.debug(
-                "Message sent successfully:\n\n%s\n", body.get("text", "Image")
-            )
+            if body.get("text"):
+                logger.debug("Message sent successfully:\n\n%s\n", body.get("text"))
+            elif body.get("picture_url"):
+                logger.debug("Image sent successfully: %s", body.get("picture_url"))
         else:
             logger.error(
                 "Failed to send message: %s - %s", response.status_code, response.text
