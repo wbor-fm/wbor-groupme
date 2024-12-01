@@ -175,7 +175,7 @@ class StandardHandler(MessageSourceHandler):
         Returns:
         - None
         """
-        body = message.get("text")
+        body = message.get("body")
         uid = message.get("wbor_message_id")
         logger.debug("Sending message with UID: %s: %s", uid, body)
 
@@ -183,6 +183,8 @@ class StandardHandler(MessageSourceHandler):
         if body:
             segments = GroupMe.split_message(body)
             GroupMe.send_text_segments(segments, uid)
+        else:
+            logger.error("Message body is missing, message not sent.")
 
         # Extract image URLs from the message and upload them to GroupMe
         images = message.get("images")
@@ -510,7 +512,7 @@ def callback(ch, method, _properties, body):
     try:
         message = json.loads(body)
         sender = message.get("From") or message.get("source")
-        logger.debug("Processing message from %s: %s", sender, message)
+        logger.debug("Processing message from `%s`: %s", sender, message.get("body"))
 
         # Handle differences in message body key capitalization due to Twilio API
         if "Body" or "body" in message:
@@ -528,7 +530,16 @@ def callback(ch, method, _properties, body):
                 message["body"] = sanitized_body
 
         logger.debug(
-            'method.routing_key.split(".")[1]: %s', method.routing_key.split(".")[1]
+            'method.routing_key.split(".")[0] is: `%s`',
+            method.routing_key.split(".")[0],
+        )
+        logger.debug(
+            'method.routing_key.split(".")[1] is: `%s`',
+            method.routing_key.split(".")[1],
+        )
+        logger.debug(
+            'method.routing_key.split(".")[2] is: `%s`',
+            method.routing_key.split(".")[2],
         )
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
         handler.process_message(message)
@@ -874,7 +885,6 @@ def send_message():
 
     logger.info("Publishing message to RabbitMQ with UID: %s", sender_uid)
     publish_to_queue(body, "source.standard")
-    logger.info("Message published successfully: %s", body)
     return "OK"
 
 
