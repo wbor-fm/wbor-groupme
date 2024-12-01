@@ -346,39 +346,43 @@ class GroupMe:
             "image/png": ".png",
         }
 
-        # Download the image from a URL (in this case, Twilio's MediaUrl)
-        image_response = requests.get(image_url, stream=True, timeout=10)
-        if image_response.status_code != 200:
-            raise requests.exceptions.RequestException(
-                f"Failed to download image from {image_url}: \
-                {image_response.status_code}"
+        try:
+            # Download the image from a URL (in this case, Twilio's MediaUrl)
+            image_response = requests.get(image_url, stream=True, timeout=10)
+            if image_response.status_code != 200:
+                raise requests.exceptions.RequestException(
+                    f"Failed to download image from {image_url}: \
+                    {image_response.status_code}"
+                )
+
+            content_type = image_response.headers.get("Content-Type", "").lower()
+            file_extension = mime_types.get(content_type)
+
+            if not file_extension:
+                logger.warning(
+                    "Unsupported content type `%s`. Must be one of: image/gif, image/jpeg, image/png",
+                    content_type,
+                )
+                return None
+
+            headers = {
+                "X-Access-Token": GROUPME_ACCESS_TOKEN,
+                "Content-Type": content_type,
+            }
+
+            # Upload the downloaded image to GroupMe
+            response = requests.post(
+                GROUPME_IMAGE_API, headers=headers, data=image_response.content, timeout=10
             )
 
-        content_type = image_response.headers.get("Content-Type", "").lower()
-        file_extension = mime_types.get(content_type)
-
-        if not file_extension:
-            logger.warning(
-                "Unsupported content type `%s`. Must be one of: image/gif, image/jpeg, image/png",
-                content_type,
-            )
+            if response.status_code == 200:
+                logger.debug("Upload successful: %s", response.json())
+                return response.json()
+            logger.warning("Upload failed: %s - %s", response.status_code, response.text)
             return None
-
-        headers = {
-            "X-Access-Token": GROUPME_ACCESS_TOKEN,
-            "Content-Type": content_type,
-        }
-
-        # Upload the downloaded image to GroupMe
-        response = requests.post(
-            GROUPME_IMAGE_API, headers=headers, data=image_response.content, timeout=10
-        )
-
-        if response.status_code == 200:
-            logger.debug("Upload successful: %s", response.json())
-            return response.json()
-        logger.warning("Upload failed: %s - %s", response.status_code, response.text)
-        return None
+        except requests.exceptions.RequestException as e:
+            logger.error("Exception occurred while processing image %s: %s", image_url, e)
+            return None
 
     @staticmethod
     def split_message(body):
@@ -528,19 +532,6 @@ def callback(ch, method, _properties, body):
                 message["Body"] = sanitized_body
             else:
                 message["body"] = sanitized_body
-
-        logger.debug(
-            'method.routing_key.split(".")[0] is: `%s`',
-            method.routing_key.split(".")[0],
-        )
-        logger.debug(
-            'method.routing_key.split(".")[1] is: `%s`',
-            method.routing_key.split(".")[1],
-        )
-        logger.debug(
-            'method.routing_key.split(".")[2] is: `%s`',
-            method.routing_key.split(".")[2],
-        )
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
         handler.process_message(message)
         ch.basic_ack(delivery_tag=method.delivery_tag)
