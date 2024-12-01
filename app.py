@@ -153,12 +153,12 @@ class TwilioHandler(MessageSourceHandler):
         """
         Process a text message from Twilio.
         """
-        logger.debug("Twilio process message handler called for message: %s", message)
+        logger.debug("Twilio `process_message` called for: %s", message.get("wbor_message_id"))
         self.send_message_to_groupme(message)
 
         # Send acknowledgment back to wbor-twilio (the sender)
         logger.debug(
-            "Sending acknowledgment for message ID: %s", message["wbor_message_id"]
+            "Sending acknowledgment for UID: %s", message["wbor_message_id"]
         )
         ack_response = requests.post(
             ACK_URL,
@@ -167,11 +167,11 @@ class TwilioHandler(MessageSourceHandler):
         )
         if ack_response.status_code == 200:
             logger.info(
-                "Acknowledgment sent for message ID: %s", message["wbor_message_id"]
+                "Acknowledgment sent for UID: %s", message["wbor_message_id"]
             )
         else:
             logger.error(
-                "Acknowledgment failed for message ID: %s. Status: %s",
+                "Acknowledgment failed for UID: %s. Status: %s",
                 message["wbor_message_id"],
                 ack_response.status_code,
             )
@@ -198,7 +198,7 @@ class TwilioHandler(MessageSourceHandler):
         try:
             body = message.get("Body")
             uid = message.get("wbor_message_id")
-            logger.debug("Sending message with UID %s: %s", uid, body)
+            logger.debug("Sending message with UID: %s: %s", uid, body)
 
             # Extract images from the message and upload them to GroupMe
             images, unsupported_type = TwilioHandler.extract_images(message)
@@ -673,12 +673,12 @@ def parse_command(text):
 def groupme_callback():
     """Callback endpoint for GroupMe API."""
     body = request.json
-    logger.info("GroupMe callback received: %s", body)
-    text = body.get("text")
-
-    # TO-DO: don't call this for messages set by the bot (to prevent infinite loops)
-    parse_command(text)
-    return "OK"
+    sender_type = body.get("sender_type")
+    if sender_type != "bot":
+        logger.info("GroupMe callback received: %s", body)
+        text = body.get("text")
+        parse_command(text)
+        return "OK"
 
 
 @app.route("/send", methods=["POST"])
