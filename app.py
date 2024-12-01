@@ -526,6 +526,11 @@ def callback(ch, method, _properties, body):
     try:
         message = json.loads(body)
         sender = message.get("From") or message.get("source")
+
+        if not sender or not message.get("body"):
+            logger.warn("Not for us: %s", message)
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            return
         logger.debug("Processing message from `%s`: %s", sender, message.get("body"))
 
         # Handle differences in message body key capitalization due to Twilio API
