@@ -852,17 +852,29 @@ def send_message():
 
     # Check for password
     if body.get("password") != APP_PASSWORD:
+        logger.warning(
+            "Unauthorized access attempt with password: %s", body.get("password")
+        )
         return "Unauthorized"
 
     # Check for required fields
-    if not all(
-        key in body for key in ["text", "password", "source"] if key != "images"
-    ):
+    required_fields = ["body", "password", "source"]
+    missing_fields = [field for field in required_fields if field not in body]
+    if missing_fields:
+        logger.error("Bad Request: Missing required fields: %s", missing_fields)
         return "Bad Request"
 
+    # Generate or use the provided UID
     sender_uid = body.get("wbor_message_id")
-    if sender_uid is not None:
-        publish_to_queue(body, "source.standard")
+    if sender_uid is None:
+        sender_uid = MessageUtils.gen_uuid()
+        logger.debug("Generated new UID: %s", sender_uid)
+    else:
+        logger.debug("Using provided UID: %s", sender_uid)
+
+    logger.info("Publishing message to RabbitMQ with UID: %s", sender_uid)
+    publish_to_queue(body, "source.standard")
+    logger.info("Message published successfully: %s", body)
     return "OK"
 
 
