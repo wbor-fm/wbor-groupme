@@ -606,7 +606,11 @@ def callback(ch, method, _properties, body):
             not message.get("type") == "sms.incoming"
             or not message.get("source") == "standard"
         ):
-            logger.warning("Wrong key for us: %s", message)
+            logger.debug("message.type: %s", message.get("type"))
+            logger.debug("message.source: %s", message.get("source"))
+            logger.warning(
+                "Wrong key for us: %s, delivery_tag: %s", message, method.delivery_tag
+            )
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
         # Handle differences in message body key capitalization due to Twilio API
