@@ -1,14 +1,16 @@
 """
 GroupMe Handler.
 - Consumes messages from the RabbitMQ queue to forward to a GroupMe group chat.
-- Alternatively, messages can be sent directly to the bot via an HTTP POST request.
+- Alternatively, messages can be sent directly to the bot via an HTTP POST request to /send.
     - Meant for sources that do not use RabbitMQ or is impractical to use.
 
 TO-DO:
 - Log GroupMe API calls in Postgres, including origination source (Twilio, etc.)
-- Callback actions - block sender based on the message's UID
+- Callback actions
+    - Block sender based on the message's UID
     - Implement message statistics tracking and retrieval
     - Implement message banning/unbanning
+    - Remotely clear the dashboard screen?
 """
 
 import os
@@ -894,5 +896,4 @@ def hello_world():
 
 
 if __name__ == "__main__":
-    consume_messages()
     app.run(host="0.0.0.0", port=APP_PORT)
