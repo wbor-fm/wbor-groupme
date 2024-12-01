@@ -602,7 +602,10 @@ def callback(ch, method, _properties, body):
             return
         logger.debug("Processing message from `%s`: %s", sender, message.get("body"))
 
-        if not message.get("type") == "sms.incoming":
+        if (
+            not message.get("type") == "sms.incoming"
+            or not message.get("source") == "standard"
+        ):
             logger.warning("Wrong key for us: %s", message)
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
