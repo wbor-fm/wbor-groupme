@@ -154,7 +154,8 @@ class TwilioHandler(MessageSourceHandler):
         Process a text message from Twilio.
         """
         logger.debug(
-            "Twilio `process_message` called for: %s", message.get("wbor_message_id")
+            "Twilio `process_message` called for UID: %s",
+            message.get("wbor_message_id"),
         )
         self.send_message_to_groupme(message)
 
@@ -592,7 +593,7 @@ def parse_command(text):
     """
     if text.startswith("!"):
         command = text.split(" ")[0].lower()
-        uid_arg = text.split(" ")[1]
+        uid_arg = text.split(" ")[1] if len(text.split(" ")) > 1 else "NO_UID"
         if command == "!help":
             GroupMe.send_to_groupme(
                 {
