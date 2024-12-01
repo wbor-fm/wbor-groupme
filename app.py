@@ -137,11 +137,66 @@ class MessageSourceHandler:
     Base class for message source handlers.
     """
 
-    def process_message(self, message):
+    def process_message(self, body):
         """
         Logic to process a message from the source.
         """
         raise NotImplementedError("This method should be implemented by subclasses.")
+
+
+class StandardHandler(MessageSourceHandler):
+    """
+    Catch-all message processing and forwarding, e.g. for the UPS/AzuraCast/etc. sources.
+
+    The request body is expected to include the following fields:
+    - body (str): The message text
+    - wbor_message_id (str): The unique message ID
+    - images (list): A list of image URLs (optional)
+    """
+
+    def process_message(self, body):
+        logger.debug(
+            "Standard `process_message` called for UID: %s",
+            body.get("wbor_message_id"),
+        )
+        self.send_message_to_groupme(body)
+        # Ack not needed
+
+    @staticmethod
+    def send_message_to_groupme(message):
+        """
+        Send a message to GroupMe.
+
+        Parameters:
+        - message (dict): The message to send
+
+        Returns:
+        - None
+        """
+        body = message.get("text")
+        uid = message.get("wbor_message_id")
+        logger.debug("Sending message with UID: %s: %s", uid, body)
+
+        # Split the message into segments if it exceeds GroupMe's character limit
+        if body:
+            segments = GroupMe.split_message(body)
+            GroupMe.send_text_segments(segments, uid)
+
+        # Extract image URLs from the message and upload them to GroupMe
+        images = message.get("images")
+        groupme_images = []
+        if images:
+            for image_url in images:
+                upload_response = GroupMe.upload_image(image_url)
+                if upload_response is not None:
+                    image_url = upload_response.get("payload", {}).get("url")
+                    if image_url:
+                        groupme_images.append(image_url)
+                else:
+                    logger.warning("Failed to upload media: %s", image_url)
+
+            if groupme_images:
+                GroupMe.send_images(groupme_images)
 
 
 class TwilioHandler(MessageSourceHandler):
@@ -149,29 +204,29 @@ class TwilioHandler(MessageSourceHandler):
     Handles Twilio-specific message processing and forwarding.
     """
 
-    def process_message(self, message):
+    def process_message(self, body):
         """
         Process a text message from Twilio.
         """
         logger.debug(
             "Twilio `process_message` called for UID: %s",
-            message.get("wbor_message_id"),
+            body.get("wbor_message_id"),
         )
-        self.send_message_to_groupme(message)
+        self.send_message_to_groupme(body)
 
         # Send acknowledgment back to wbor-twilio (the sender)
-        logger.debug("Sending acknowledgment for UID: %s", message["wbor_message_id"])
+        logger.debug("Sending acknowledgment for UID: %s", body["wbor_message_id"])
         ack_response = requests.post(
             ACK_URL,
-            json={"wbor_message_id": message["wbor_message_id"]},
+            json={"wbor_message_id": body["wbor_message_id"]},
             timeout=3,
         )
         if ack_response.status_code == 200:
-            logger.info("Acknowledgment sent for UID: %s", message["wbor_message_id"])
+            logger.info("Acknowledgment sent for UID: %s", body["wbor_message_id"])
         else:
             logger.error(
                 "Acknowledgment failed for UID: %s. Status: %s",
-                message["wbor_message_id"],
+                body["wbor_message_id"],
                 ack_response.status_code,
             )
 
@@ -417,21 +472,26 @@ class GroupMe:
             logger.error(
                 "Failed to send message: %s - %s", response.status_code, response.text
             )
-        # publish_to_exchange(body, response.status_code, uid)
+        # publish_log_pg(body, response.status_code, uid)
 
 
 # Define message handlers for each source
 # Each handler should implement the `process_message` method
 # These handlers are used to process messages from the RabbitMQ queue based on the routing key
-MESSAGE_HANDLERS = {"twilio": TwilioHandler()}
+MESSAGE_HANDLERS = {"twilio": TwilioHandler(), "standard": StandardHandler()}
 
 # These are defined automatically based on the keys in MESSAGE_HANDLERS
+# e.g. "twilio" -> "source.twilio.#", "standard" -> "source.standard.#"
 SOURCES = {key: f"source.{key}.#" for key in MESSAGE_HANDLERS}
 
 
 def callback(ch, method, _properties, body):
     """
     Callback function to process messages from the RabbitMQ queue.
+
+    Treatment for all messages:
+    - Sanitize the message body
+    - Process the message using the appropriate handler
 
     Parameters:
     - body: The message body
@@ -447,11 +507,12 @@ def callback(ch, method, _properties, body):
 
     try:
         message = json.loads(body)
-        sender_number = message.get("From")
-        logger.debug("Processing message from %s: %s", sender_number, message)
+        sender = message.get("From") or message.get("source")
+        logger.debug("Processing message from %s: %s", sender, message)
 
-        if "Body" in message:
-            original_body = message["Body"]
+        # Handle differences in message body key capitalization due to Twilio API
+        if "Body" or "body" in message:
+            original_body = message.get("Body") or message.get("body")
             sanitized_body = MessageUtils.sanitize_string(original_body)
             if original_body != sanitized_body:
                 logger.warning(
@@ -459,8 +520,14 @@ def callback(ch, method, _properties, body):
                     original_body,
                     sanitized_body,
                 )
-            message["Body"] = sanitized_body
+            if message.get("Body"):
+                message["Body"] = sanitized_body
+            else:
+                message["body"] = sanitized_body
 
+        logger.debug(
+            'method.routing_key.split(".")[1]: %s', method.routing_key.split(".")[1]
+        )
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
         handler.process_message(message)
         ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -473,7 +540,12 @@ def callback(ch, method, _properties, body):
 
 
 def consume_messages():
-    """Consume messages from the RabbitMQ queue."""
+    """
+    Consume messages from the RabbitMQ queue. Sets up the connection and channel for each source.
+    Binds the queue to the exchange and starts consuming messages, calling the callback function.
+
+    The callback function processes the message and acknowledges it if successful.
+    """
     while True:
         logger.debug("Attempting to connect to RabbitMQ...")
         credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
@@ -486,7 +558,7 @@ def consume_messages():
             connection = pika.BlockingConnection(parameters)
             channel = connection.channel()
 
-            # Assert the exchange exists
+            # Assert that the primary exchange exists
             channel.exchange_declare(
                 exchange="source_exchange", exchange_type="topic", durable=True
             )
@@ -521,7 +593,67 @@ def consume_messages():
             time.sleep(5)
 
 
-def publish_to_exchange(message, statuscode, key="source.groupme", sub_key="log"):
+def publish_to_queue(request_body, key):
+    """
+    Publish a message to the RabbitMQ queue.
+
+    Parameters:
+    - request_body (dict): The message request body to publish
+        - body (str): The message text
+        - wbor_message_id (str): The unique message ID
+        - images (list): A list of image URLs (optional)
+    - key (str): The routing key for the message
+        - e.g. "source.twilio", "source.standard"
+            - In this case, `twilio` is published in the wbor-twilio service
+
+    Returns:
+    - None
+    """
+    try:
+        logger.debug("Attempting to connect to RabbitMQ...")
+        credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
+        parameters = pika.ConnectionParameters(
+            host=RABBITMQ_HOST,
+            credentials=credentials,
+            client_properties={"connection_name": "GroupMePublisherConnection"},
+        )
+        connection = pika.BlockingConnection(parameters)
+        channel = connection.channel()
+        logger.debug("Connected!")
+
+        channel.exchange_declare(
+            exchange="source_exchange", exchange_type="topic", durable=True
+        )
+        channel.basic_publish(
+            exchange="source_exchange",
+            routing_key=key,
+            body=json.dumps(request_body).encode(),
+            properties=pika.BasicProperties(
+                headers={
+                    "x-retry-count": 0
+                },  # Initialize retry count for other consumers
+                delivery_mode=2,  # Make the message persistent
+            ),
+        )
+        logger.info("Message published: %s", request_body)
+        connection.close()
+    except pika.exceptions.AMQPConnectionError as e:
+        logger.error(
+            'Connection error when publishing to exchange with routing key "source.%s": %s',
+            key,
+            e,
+        )
+    except pika.exceptions.AMQPChannelError as e:
+        logger.error(
+            'Channel error when publishing to exchange with routing key "source.%s": %s',
+            key,
+            e,
+        )
+    except json.JSONDecodeError as e:
+        logger.error("JSON encoding error for message %s: %s", request_body, e)
+
+
+def publish_log_pg(message, statuscode, key="source.groupme", sub_key="log"):
     """
     Log message actions in Postgres by publishing to the RabbitMQ exchange.
 
@@ -585,6 +717,8 @@ def parse_command(text):
     """
     Parse a command from a GroupMe message.
 
+    TO-DO: Put actual functionality in a separate class.
+
     Parameters:
     - text (str): The message text to parse
 
@@ -614,8 +748,9 @@ def parse_command(text):
             GroupMe.send_to_groupme(
                 {
                     "text": (
-                        "Ban functionality is not yet implemented."
-                        "This will block a phone # from sending messages to the station."
+                        "Ban functionality is not yet implemented. "
+                        "This will block a phone # from sending messages to the station. "
+                        f"UID: {uid_arg}"
                     )
                 }
             )
@@ -631,8 +766,9 @@ def parse_command(text):
             GroupMe.send_to_groupme(
                 {
                     "text": (
-                        "Unban functionality is not yet implemented."
-                        "This will unblock a phone # from sending messages to the station."
+                        "Unban functionality is not yet implemented. "
+                        "This will unblock a phone # from sending messages to the station. "
+                        f"UID: {uid_arg}"
                     )
                 }
             )
@@ -649,8 +785,9 @@ def parse_command(text):
             GroupMe.send_to_groupme(
                 {
                     "text": (
-                        "Stats functionality is not yet implemented."
-                        "This will include information such as the # of messages sent by a #."
+                        "Stats functionality is not yet implemented. "
+                        "This will include information such as the # of messages sent by a #. "
+                        f"UID: {uid_arg}"
                     )
                 }
             )
@@ -670,7 +807,9 @@ def parse_command(text):
 
 @app.route("/callback", methods=["POST"])
 def groupme_callback():
-    """Callback endpoint for GroupMe API."""
+    """
+    Callback endpoint for GroupMe API upon messages being sent to the group chat.
+    """
     body = request.json
     sender_type = body.get("sender_type")
     if sender_type != "bot":
@@ -693,10 +832,10 @@ def send_message():
     - Images (if any)
 
     Request body includes the following fields:
-    - text (str): The message text to send
+    - body (str): The message text to send
     - password (str): The password to authenticate the request
     - source (str): The source of the message (e.g. "Twilio")
-    - uid (str): The unique message ID (generated by message originator) (optional)
+    - wbor_message_id (str): The unique message ID (generated by message originator) (optional)
         - If not provided (the case for non-RabbitMQ messages), a UID will be generated
     - images (list): A list of image URLs to send (optional)
 
@@ -708,6 +847,20 @@ def send_message():
     """
     body = request.json
     logger.info("Send callback received: %s", body)
+
+    # Check for password
+    if body.get("password") != os.getenv("SEND_PASSWORD"):
+        return "Unauthorized"
+
+    # Check for required fields
+    if not all(
+        key in body for key in ["text", "password", "source"] if key != "images"
+    ):
+        return "Bad Request"
+
+    sender_uid = body.get("wbor_message_id")
+    if sender_uid is not None:
+        publish_to_queue(body, "source.standard")
     return "OK"
 
 
