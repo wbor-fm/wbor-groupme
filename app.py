@@ -1,10 +1,34 @@
 """
 GroupMe Handler.
-- Consumes messages from the RabbitMQ queue to forward to a GroupMe group chat.
-- Alternatively, messages can be sent directly to the bot via an HTTP POST request to /send.
-    - Meant for sources that do not use RabbitMQ or is impractical to use.
 
-TO-DO:
+We have a group chat on GroupMe that includes all members of station management.
+This chat is used to monitor messages from various sources, including incoming Twilio SMS messages,
+our UPS backups, our Sage Digital ENDEC, and our online AzuraCast streams.
+
+This application serves as a message handler for the GroupMe chat. Various sources submit messages
+to RabbitMQ, which are then consumed by this application. The messages are then forwarded to the
+GroupMe chat.
+
+Additionally, this application can receive messages directly via an HTTP POST request to /send,
+which is meant for sources that do not use RabbitMQ or is impractical to use.
+
+The application also includes a callback endpoint for the GroupMe API, which is triggered when
+messages are sent to the group chat. This allows for various commands to be parsed and executed.
+Twilio commands include:
+- Banning a phone number from sending messages
+- Unbanning a phone number from sending messages
+- Displaying message statistics for a phone number
+
+Finally, all interactions with the GroupMe API are logged in Postgres for auditing purposes.
+
+Message handling:
+- Messages are received from RabbitMQ and processed by the appropriate handler based on the 
+  routing key.
+- For all messages:
+    - The message body is sanitized to remove unprintable characters.
+    - The message is processed by the appropriate handler.
+
+TODO:
 - Log GroupMe API calls in Postgres, including origination source (Twilio, etc.)
 - Callback actions
     - Block sender based on the message's UID
@@ -45,6 +69,8 @@ GROUPME_API = "https://api.groupme.com/v3/bots/post"
 GROUPME_IMAGE_API = "https://image.groupme.com/pictures"
 
 ACK_URL = "http://wbor-twilio:5000/acknowledge"
+
+EXCHANGE = "source_exchange"
 
 
 # Logging
@@ -189,6 +215,39 @@ class StandardHandler(MessageSourceHandler):
             logger.error("Message body is missing, message not sent.")
 
         # Extract image URLs from the message and upload them to GroupMe
+        groupme_images, unsupported_type = StandardHandler.extract_images(message)
+
+        if groupme_images:
+            GroupMe.send_images(groupme_images)
+        if unsupported_type:
+            GroupMe.send_to_groupme(
+                {
+                    "text": (
+                        "A media item was sent with an unsupported format.\n\n"
+                        "Check the message in Twilio logs for details.\n"
+                        "---------\n"
+                        "%s\n"
+                        "---------",
+                        uid,
+                    )
+                },
+                uid=uid,
+            )
+
+    @staticmethod
+    def extract_images(message):
+        """
+        Extract image URLs from the message response body and upload them to GroupMe's image service.
+
+        Parameters:
+        - message (dict): The standard message response body
+
+        Returns:
+        - groupme_images (list): A list of image URLs from GroupMe's image service
+        - unsupported_type (bool): True if an unsupported media type was found, False otherwise
+        """
+        unsupported_type = False
+
         images = message.get("images")
         groupme_images = []
         if images:
@@ -200,9 +259,8 @@ class StandardHandler(MessageSourceHandler):
                         groupme_images.append(image_url)
                 else:
                     logger.warning("Failed to upload media: %s", image_url)
-
-            if groupme_images:
-                GroupMe.send_images(groupme_images)
+                    unsupported_type = True
+        return groupme_images, unsupported_type
 
 
 class TwilioHandler(MessageSourceHandler):
@@ -292,7 +350,8 @@ class TwilioHandler(MessageSourceHandler):
     @staticmethod
     def extract_images(message):
         """
-        Extract image URLs from the message response body and upload them to GroupMe's image service
+        Extract image URLs from Twilio's message response body and upload them to GroupMe's image
+        service.
 
         Assumes that only up to 10 images are present in the original message.
         (which is what Twilio supports)
@@ -362,7 +421,8 @@ class GroupMe:
 
             if not file_extension:
                 logger.warning(
-                    "Unsupported content type `%s`. Must be one of: image/gif, image/jpeg, image/png",
+                    "Unsupported content type `%s`. "
+                    "Must be one of: image/gif, image/jpeg, image/png",
                     content_type,
                 )
                 return None
@@ -415,6 +475,7 @@ class GroupMe:
         """
         Send each text segment to GroupMe.
         Pre-process the text to include segment labels (if applicable) and an end marker.
+        A delay is added between each segment to prevent rate limiting.
 
         Parameters:
         - segments (list): A list of message segment strings
@@ -445,6 +506,7 @@ class GroupMe:
     def send_images(images):
         """
         Send images to GroupMe if any are present.
+        A delay is added between each image to prevent rate limiting.
 
         Parameters:
         - images (list): A list of image URLs from GroupMe's image service
@@ -490,16 +552,18 @@ class GroupMe:
             logger.error(
                 "Failed to send message: %s - %s", response.status_code, response.text
             )
-        # publish_log_pg(body, response.status_code, uid)
+        # TODO: Log the GroupMe API call in Postgres
 
 
 # Define message handlers for each source
 # Each handler should implement the `process_message` method
 # These handlers are used to process messages from the RabbitMQ queue based on the routing key
+# e.g. "source.twilio.*" -> TwilioHandler(), "source.standard.*" -> StandardHandler()
 MESSAGE_HANDLERS = {"twilio": TwilioHandler(), "standard": StandardHandler()}
 
 # These are defined automatically based on the keys in MESSAGE_HANDLERS
 # e.g. "twilio" -> "source.twilio.#", "standard" -> "source.standard.#"
+# Used for binding the relevant queues to the exchange
 SOURCES = {key: f"source.{key}.#" for key in MESSAGE_HANDLERS}
 
 
@@ -525,14 +589,19 @@ def callback(ch, method, _properties, body):
 
     try:
         message = json.loads(body)
+        logger.debug("Received message: %s", message)
         sender = message.get("From") or message.get("source")
 
-        if not sender or not message.get("body"):
-            logger.warn("Not for us: %s", message)
+        if not sender and (not message.get("body") or not message.get("Body")):
+            logger.warning("Not for us: %s", message)
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
         logger.debug("Processing message from `%s`: %s", sender, message.get("body"))
 
+        if not message.get("type") == "sms.incoming":
+            logger.warning("Wrong key for us: %s", message)
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            return
         # Handle differences in message body key capitalization due to Twilio API
         if "Body" or "body" in message:
             original_body = message.get("Body") or message.get("body")
@@ -547,6 +616,8 @@ def callback(ch, method, _properties, body):
                 message["Body"] = sanitized_body
             else:
                 message["body"] = sanitized_body
+
+        logger.debug("Using handler query: %s", method.routing_key.split(".")[1])
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
         handler.process_message(message)
         ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -561,7 +632,7 @@ def callback(ch, method, _properties, body):
 def consume_messages():
     """
     Consume messages from the RabbitMQ queue. Sets up the connection and channel for each source.
-    Binds the queue to the exchange and starts consuming messages, calling the callback function.
+    Binds the queue to the exchange and starts consuming messages, calling callback().
 
     The callback function processes the message and acknowledges it if successful.
     """
@@ -579,7 +650,7 @@ def consume_messages():
 
             # Assert that the primary exchange exists
             channel.exchange_declare(
-                exchange="source_exchange", exchange_type="topic", durable=True
+                exchange=EXCHANGE, exchange_type="topic", durable=True
             )
 
             # Declare and bind queues dynamically
@@ -588,13 +659,14 @@ def consume_messages():
                 channel.queue_declare(queue=queue_name, durable=True)
                 logger.debug("Queue declared: %s", queue_name)
                 channel.queue_bind(
-                    exchange="source_exchange",
+                    exchange=EXCHANGE,
                     queue=queue_name,
                     routing_key=routing_key,
                 )
                 logger.debug(
-                    'Queue "%s" bound to "source_exchange" with routing key %s',
+                    "Queue `%s` bound to `%s` with routing key %s",
                     queue_name,
+                    EXCHANGE,
                     routing_key,
                 )
                 channel.basic_consume(
@@ -640,11 +712,9 @@ def publish_to_queue(request_body, key):
         channel = connection.channel()
         logger.debug("Connected!")
 
-        channel.exchange_declare(
-            exchange="source_exchange", exchange_type="topic", durable=True
-        )
+        channel.exchange_declare(exchange=EXCHANGE, exchange_type="topic", durable=True)
         channel.basic_publish(
-            exchange="source_exchange",
+            exchange=EXCHANGE,
             routing_key=key,
             body=json.dumps(request_body).encode(),
             properties=pika.BasicProperties(
@@ -692,11 +762,9 @@ def publish_log_pg(message, statuscode, key="source.groupme", sub_key="log"):
         channel = connection.channel()
         logger.debug("Connected!")
 
-        channel.exchange_declare(
-            exchange="source_exchange", exchange_type="topic", durable=True
-        )
+        channel.exchange_declare(exchange=EXCHANGE, exchange_type="topic", durable=True)
         channel.basic_publish(
-            exchange="source_exchange",
+            exchange=EXCHANGE,
             routing_key=key,
             body=json.dumps(
                 {
@@ -732,11 +800,11 @@ def publish_log_pg(message, statuscode, key="source.groupme", sub_key="log"):
         logger.error("JSON encoding error for message %s: %s", message, json_error)
 
 
-def parse_command(text):
+def parse_message(text):
     """
-    Parse a command from a GroupMe message.
+    Parse a GroupMe message sent by a group member.
 
-    TO-DO: Put actual functionality in a separate class.
+    TODO: Put actual functionality in a separate class.
 
     Parameters:
     - text (str): The message text to parse
@@ -763,7 +831,7 @@ def parse_command(text):
         elif command == "!ping":
             GroupMe.send_to_groupme({"text": f"Pong! UID: {uid_arg}"})
         elif command == "!ban":
-            # TO-DO: Implement ban functionality
+            # TODO: Implement ban functionality
             GroupMe.send_to_groupme(
                 {
                     "text": (
@@ -781,7 +849,7 @@ def parse_command(text):
             #         }
             #     )
         elif command == "!unban":
-            # TO-DO: Implement unban functionality
+            # TODO: Implement unban functionality
             GroupMe.send_to_groupme(
                 {
                     "text": (
@@ -798,9 +866,8 @@ def parse_command(text):
             #             "text": f"Phone # associated with message UID {uid} has been UNBANNED from sending messages."
             #         }
             #     )
-
         elif command == "!stats":
-            # TO-DO: Implement stats functionality
+            # TODO: Implement stats functionality
             GroupMe.send_to_groupme(
                 {
                     "text": (
@@ -834,7 +901,7 @@ def groupme_callback():
     if sender_type != "bot":
         logger.info("GroupMe callback received: %s", body)
         text = body.get("text")
-        parse_command(text)
+        parse_message(text)
     return "OK"
 
 
