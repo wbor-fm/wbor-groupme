@@ -1,10 +1,11 @@
 """
 GroupMe Handler.
 - Consumes messages from the RabbitMQ queue to forward to a GroupMe group chat.
+- Alternatively, messages can be sent directly to the bot via an HTTP POST request.
+    - Meant for sources that do not use RabbitMQ or is impractical to use.
 
 TO-DO:
 - Log GroupMe API calls in Postgres, including origination source (Twilio, etc.)
-    - Requires to first generalize Postgres insertion logic to multiple sources
 - Callback actions - block sender based on the message's UID
     - Implement message statistics tracking and retrieval
     - Implement message banning/unbanning
@@ -16,6 +17,7 @@ import json
 from datetime import datetime, timezone
 import sys
 import time
+import uuid
 import requests
 import pika
 import pika.exceptions
@@ -78,13 +80,14 @@ if not GROUPME_BOT_ID or not GROUPME_ACCESS_TOKEN:
 
 class MessageUtils:
     """
-    Common utility functions for message processing.
+    Common utility functions for messages.
     """
 
     @staticmethod
     def sanitize_string(string, replacement="\uFFFD"):
         """
         Remove or replace unprintable characters from a string.
+        Allows for newlines and tabs.
 
         Parameters:
         - text (str): The input string to sanitize.
@@ -100,10 +103,15 @@ class MessageUtils:
         string = string.replace(
             "\xa0", " "
         )  # Replace non-breaking space with regular spaces
-        sanitized = "".join(
-            char if char.isprintable() or MessageUtils.is_emoji(char) else replacement
-            for char in string
-        )
+
+        # Replace unprintable characters with the replacement character
+        sanitized = []
+        for char in string:
+            if char.isprintable() or MessageUtils.is_emoji(char) or char in "\n\t":
+                sanitized.append(char)
+            else:
+                sanitized.append(replacement)
+        sanitized = "".join(sanitized)
         return sanitized
 
     @staticmethod
@@ -117,6 +125,11 @@ class MessageUtils:
         # - U+2700 to U+27BF (dingbats)
         # - Additional ranges may exist
         return emoji.is_emoji(char)
+
+    @staticmethod
+    def gen_uuid():
+        """Generate a UUID for a message."""
+        return str(uuid.uuid4())
 
 
 class MessageSourceHandler:
@@ -140,13 +153,13 @@ class TwilioHandler(MessageSourceHandler):
         """
         Process a text message from Twilio.
         """
-        logger.debug("Processing Twilio message: %s", message)
+        logger.debug("Twilio process message handler called for message: %s", message)
         self.send_message_to_groupme(message)
 
+        # Send acknowledgment back to wbor-twilio (the sender)
         logger.debug(
             "Sending acknowledgment for message ID: %s", message["wbor_message_id"]
         )
-        # Send acknowledgment back to wbor-twilio (the sender)
         ack_response = requests.post(
             ACK_URL,
             json={"wbor_message_id": message["wbor_message_id"]},
@@ -185,7 +198,7 @@ class TwilioHandler(MessageSourceHandler):
         try:
             body = message.get("Body")
             uid = message.get("wbor_message_id")
-            logger.debug("Sending message %s: %s", uid, body)
+            logger.debug("Sending message with UID %s: %s", uid, body)
 
             # Extract images from the message and upload them to GroupMe
             images, unsupported_type = TwilioHandler.extract_images(message)
@@ -209,7 +222,8 @@ class TwilioHandler(MessageSourceHandler):
                             "---------",
                             uid,
                         )
-                    }
+                    },
+                    uid=uid,
                 )
 
         except (requests.exceptions.RequestException, KeyError) as e:
@@ -353,7 +367,7 @@ class GroupMe:
             data = {
                 "text": f'{segment_label}"{segment}"{end_marker}',
             }
-            GroupMe.send_to_groupme(data)
+            GroupMe.send_to_groupme(data, uid=uid)
             time.sleep(0.1)  # Rate limit to prevent GroupMe API rate limiting
 
     @staticmethod
@@ -377,9 +391,9 @@ class GroupMe:
             time.sleep(0.1)
 
     @staticmethod
-    def send_to_groupme(body, bot_id=GROUPME_BOT_ID):
+    def send_to_groupme(body, uid=MessageUtils.gen_uuid(), bot_id=GROUPME_BOT_ID):
         """
-        Make the actual HTTP POST request to GroupMe API and log the response.
+        Make the actual HTTP POST request to GroupMe API. Logs the request in Postgres.
 
         Parameters:
         - body (dict): The message body to send.
@@ -397,11 +411,14 @@ class GroupMe:
         response = requests.post(GROUPME_API, json=body, timeout=10)
 
         if response.status_code in {200, 202}:
-            logger.debug("Message Sent: %s", body.get("text", "Image"))
+            logger.debug(
+                "Message sent successfully:\n\n%s\n", body.get("text", "Image")
+            )
         else:
             logger.error(
                 "Failed to send message: %s - %s", response.status_code, response.text
             )
+        # publish_to_exchange(body, response.status_code, uid)
 
 
 # Define message handlers for each source
@@ -410,7 +427,7 @@ class GroupMe:
 MESSAGE_HANDLERS = {"twilio": TwilioHandler()}
 
 # These are defined automatically based on the keys in MESSAGE_HANDLERS
-SOURCES = {key: f"source.{key}" for key in MESSAGE_HANDLERS}
+SOURCES = {key: f"source.{key}.#" for key in MESSAGE_HANDLERS}
 
 
 def callback(ch, method, _properties, body):
@@ -505,6 +522,66 @@ def consume_messages():
             time.sleep(5)
 
 
+def publish_to_exchange(message, statuscode, key="source.groupme", sub_key="log"):
+    """
+    Log message actions in Postgres by publishing to the RabbitMQ exchange.
+
+    Parameters:
+    - message (dict): The message to publish
+    - routing_key (str): The routing key for the message
+    """
+    try:
+        logger.debug("Attempting to connect to RabbitMQ...")
+        credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
+        parameters = pika.ConnectionParameters(
+            host=RABBITMQ_HOST,
+            credentials=credentials,
+            client_properties={"connection_name": "GroupMePublisherConnection"},
+        )
+        connection = pika.BlockingConnection(parameters)
+        channel = connection.channel()
+        logger.debug("Connected!")
+
+        channel.exchange_declare(
+            exchange="source_exchange", exchange_type="topic", durable=True
+        )
+        channel.basic_publish(
+            exchange="source_exchange",
+            routing_key=key,
+            body=json.dumps(
+                {
+                    **message,
+                    "code": statuscode,
+                    "type": sub_key,
+                }
+            ).encode(),
+            properties=pika.BasicProperties(
+                headers={
+                    "x-retry-count": 0
+                },  # Initialize retry count for other consumers
+                delivery_mode=2,  # Make the message persistent
+            ),
+        )
+        logger.info("Message published: %s", message)
+        connection.close()
+    except pika.exceptions.AMQPConnectionError as conn_error:
+        logger.error(
+            'Connection error when publishing to exchange with routing key "source.%s.%s": %s',
+            key,
+            sub_key,
+            conn_error,
+        )
+    except pika.exceptions.AMQPChannelError as chan_error:
+        logger.error(
+            'Channel error when publishing to exchange with routing key "source.%s.%s": %s',
+            key,
+            sub_key,
+            chan_error,
+        )
+    except json.JSONDecodeError as json_error:
+        logger.error("JSON encoding error for message %s: %s", message, json_error)
+
+
 def parse_command(text):
     """
     Parse a command from a GroupMe message.
@@ -517,48 +594,54 @@ def parse_command(text):
     """
     if text.startswith("!"):
         command = text.split(" ")[0].lower()
-        uid = text.split(" ")[1]
+        uid_arg = text.split(" ")[1]
         if command == "!help":
             GroupMe.send_to_groupme(
                 {
                     "text": (
-                        "Available commands:\n\n"
-                        "!help - Display this help message\n\n"
-                        "!ping - Check if the bot is online\n\n"
-                        "!ban <UID> - Ban a phone number from sending messages\n\n"
-                        "!unban <UID> - Unban a phone number from sending messages\n\n"
+                        "Available commands:\n"
+                        "!help - Display this help message\n"
+                        "!ping - Check if the bot is online\n"
+                        "!ban <UID> - Ban a phone number from sending messages\n"
+                        "!unban <UID> - Unban a phone number from sending messages\n"
                         "!stats <UID> - Display message statistics for a phone number"
                     )
                 }
             )
         elif command == "!ping":
-            GroupMe.send_to_groupme({"text": "Pong!"})
+            GroupMe.send_to_groupme({"text": f"Pong! UID: {uid_arg}"})
         elif command == "!ban":
             # TO-DO: Implement ban functionality
             GroupMe.send_to_groupme(
                 {
-                    "text": "Ban functionality is not yet implemented. This will block a phone number from sending messages to the station."
+                    "text": (
+                        "Ban functionality is not yet implemented."
+                        "This will block a phone # from sending messages to the station."
+                    )
                 }
             )
 
             # if ban(uid):
             #     GroupMe.send_to_groupme(
             #         {
-            #             "text": f"Phone number associated with message UID {uid} has been banned from sending messages."
+            #             "text": f"Phone # associated with message UID {uid} has been banned from sending messages."
             #         }
             #     )
         elif command == "!unban":
             # TO-DO: Implement unban functionality
             GroupMe.send_to_groupme(
                 {
-                    "text": "Unan functionality is not yet implemented. This will unblock a phone number from sending messages to the station."
+                    "text": (
+                        "Unban functionality is not yet implemented."
+                        "This will unblock a phone # from sending messages to the station."
+                    )
                 }
             )
 
             # if unban(uid):
             #     GroupMe.send_to_groupme(
             #         {
-            #             "text": f"Phone number associated with message UID {uid} has been unbanned from sending messages."
+            #             "text": f"Phone # associated with message UID {uid} has been UNBANNED from sending messages."
             #         }
             #     )
 
@@ -566,7 +649,10 @@ def parse_command(text):
             # TO-DO: Implement stats functionality
             GroupMe.send_to_groupme(
                 {
-                    "text": "Stats functionality is not yet implemented. This will include information such as the number of messages sent by a phone number."
+                    "text": (
+                        "Stats functionality is not yet implemented."
+                        "This will include information such as the # of messages sent by a #."
+                    )
                 }
             )
 
@@ -589,7 +675,40 @@ def groupme_callback():
     body = request.json
     logger.info("GroupMe callback received: %s", body)
     text = body.get("text")
+
+    # TO-DO: don't call this for messages set by the bot (to prevent infinite loops)
     parse_command(text)
+    return "OK"
+
+
+@app.route("/send", methods=["POST"])
+def send_message():
+    """
+    Send a message via a bot. Meant for sources that do not use RabbitMQ or is impractical to use.
+
+    Logs the message in Postgres with:
+    - Source (e.g. Twilio)
+    - UID (unique message ID)
+    - Timestamp
+    - Text
+    - Images (if any)
+
+    Request body includes the following fields:
+    - text (str): The message text to send
+    - password (str): The password to authenticate the request
+    - source (str): The source of the message (e.g. "Twilio")
+    - uid (str): The unique message ID (generated by message originator) (optional)
+        - If not provided (the case for non-RabbitMQ messages), a UID will be generated
+    - images (list): A list of image URLs to send (optional)
+
+    Returns:
+    - str: "OK" if the message was sent successfully
+    - str: "Unauthorized" if the password is incorrect
+    - str: "Bad Request" if the request body is missing required fields
+    - str: "Internal Server Error" if the message failed to send
+    """
+    body = request.json
+    logger.info("Send callback received: %s", body)
     return "OK"
 
 
