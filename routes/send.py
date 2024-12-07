@@ -5,7 +5,7 @@ Send message module.
 from flask import Blueprint, request
 from utils.message import MessageUtils
 from utils.logging import configure_logging
-from rabbitmq.publisher import publish_to_queue
+from rabbitmq.publisher import publish_message
 from config import APP_PASSWORD
 
 logger = configure_logging(__name__)
@@ -66,5 +66,5 @@ def send_message():
         logger.debug("UID provided by source: %s", sender_uid)
 
     logger.info("Publishing to RabbitMQ: %s", sender_uid)
-    publish_to_queue(body, "source.standard")
+    publish_message(body, "source.standard")
     return "OK"

@@ -6,6 +6,7 @@ import time
 import requests
 from utils.logging import configure_logging
 from utils.message import MessageUtils
+from rabbitmq.publisher import publish_log_pg
 from config import (
     GROUPCHAT_NAME,
     GROUPME_API,
@@ -194,4 +195,4 @@ class GroupMe:
             logger.error(
                 "Failed to send message: %s - %s", response.status_code, response.text
             )
-        # TODO: Log the GroupMe API call in Postgres
+        publish_log_pg(body, response.status_code, uid)
