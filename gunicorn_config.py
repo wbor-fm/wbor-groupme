@@ -22,6 +22,10 @@ def post_fork(_server, worker):
     logger = logging.getLogger(__name__)
     logger.info("Initializing post-fork process for worker: %s", worker.pid)
 
+    # Ensure no duplicate handlers are added
+    for handler in logging.root.handlers:
+        logging.root.removeHandler(handler)
+
     logger.info("Starting consumer thread for message processing.")
     consumer_thread = threading.Thread(
         target=consume_messages, daemon=True, name="ConsumerThread"

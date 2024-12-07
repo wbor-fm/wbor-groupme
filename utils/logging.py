@@ -47,8 +47,10 @@ def configure_logging(logger_name="wbor_groupme"):
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
+    # Also configure the Werkzeug logger
     werkzeug_logger = logging.getLogger("werkzeug")
-    werkzeug_logger.setLevel(logging.INFO)
-    werkzeug_logger.addHandler(console_handler)
+    if not werkzeug_logger.hasHandlers():  # Avoid duplicates
+        werkzeug_logger.setLevel(logging.INFO)
+        werkzeug_logger.addHandler(console_handler)
 
     return logger

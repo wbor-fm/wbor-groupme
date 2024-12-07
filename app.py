@@ -45,6 +45,7 @@ TODO:
 """
 
 import sys
+import logging
 from flask import Flask
 from config import APP_PORT, GROUPME_BOT_ID, GROUPME_ACCESS_TOKEN
 from utils.logging import configure_logging
@@ -52,6 +53,7 @@ from routes.base import base
 from routes.groupme import groupme
 from routes.send import send
 
+logging.root.handlers = []
 logger = configure_logging()
 
 app = Flask(__name__)
