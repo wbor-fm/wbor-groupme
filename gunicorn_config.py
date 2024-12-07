@@ -4,7 +4,13 @@ Handle Gunicorn worker post-fork initialization.
 
 import threading
 import logging
-from app import consume_messages
+from rabbitmq.consumer import consume_messages
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 
 def post_fork(_server, worker):
