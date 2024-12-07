@@ -753,7 +753,7 @@ def publish_to_queue(request_body, key):
         )
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
-        logger.info("RabbitMQ connected!")
+        logger.debug("RabbitMQ connected!")
 
         channel.exchange_declare(exchange=EXCHANGE, exchange_type="topic", durable=True)
         channel.basic_publish(
@@ -803,7 +803,7 @@ def publish_log_pg(message, statuscode, key="source.groupme", sub_key="log"):
         )
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
-        logger.info("RabbitMQ connected!")
+        logger.debug("RabbitMQ connected!")
 
         channel.exchange_declare(exchange=EXCHANGE, exchange_type="topic", durable=True)
         channel.basic_publish(
