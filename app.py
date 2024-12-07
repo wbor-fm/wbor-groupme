@@ -64,6 +64,7 @@ from dotenv import load_dotenv
 load_dotenv()
 APP_PORT = os.getenv("APP_PORT", "2000")
 APP_PASSWORD = os.getenv("APP_PASSWORD")
+GROUPCHAT_NAME = os.getenv("GROUPCHAT_NAME", "WBOR MGMT")
 
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "wbor-rabbitmq")
 RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
@@ -227,7 +228,7 @@ class StandardHandler(MessageSourceHandler):
         """
         body = message.get("body")
         uid = message.get("wbor_message_id")
-        logger.info("Sending message: %s: %s", uid, body)
+        logger.debug("Sending message: %s: %s", uid, body)
 
         # Split the message into segments if it exceeds GroupMe's character limit
         if body:
@@ -339,7 +340,7 @@ class TwilioHandler(MessageSourceHandler):
         try:
             body = message.get("Body")
             uid = message.get("wbor_message_id")
-            logger.info("Sending message: %s: %s", uid, body)
+            logger.debug("Sending message: %s: %s", uid, body)
 
             # Extract images from the message and upload them to GroupMe
             images, unsupported_type = TwilioHandler.extract_images(message)
@@ -568,7 +569,11 @@ class GroupMe:
 
         if response.status_code in {200, 202}:
             if body.get("text"):
-                logger.info("Message sent successfully:\n\n%s\n", body.get("text"))
+                logger.info(
+                    "Message sent successfully to %s:\n\n%s\n",
+                    GROUPCHAT_NAME,
+                    body.get("text"),
+                )
             elif body.get("picture_url"):
                 logger.info("Image sent successfully: %s", body.get("picture_url"))
         else:
@@ -623,7 +628,8 @@ def callback(ch, method, _properties, body):
             logger.warning("Not for us: %s", message)
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
-        logger.debug("Processing message from `%s`: %s", sender, message.get("body"))
+        original_body = message.get("Body") or message.get("body")
+        logger.info("Processing message from `%s`: %s", sender, original_body)
 
         if (
             not message.get("type") == "sms.incoming"
@@ -655,7 +661,7 @@ def callback(ch, method, _properties, body):
         if not message.get("wbor_message_id"):
             message["wbor_message_id"] = MessageUtils.gen_uuid()
 
-        logger.debug("Using handler query: %s", method.routing_key.split(".")[1])
+        logger.debug("Handler query provided: `%s`", method.routing_key.split(".")[1])
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
         handler.process_message(message)
         ch.basic_ack(delivery_tag=method.delivery_tag)
