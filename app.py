@@ -28,6 +28,13 @@ Message handling:
     - The message body is sanitized to remove unprintable characters.
     - The message is processed by the appropriate handler.
 
+Source keys:
+- `source.twilio.sms.incoming`: TwilioHandler()
+- `source.standard.*`: StandardHandler()
+- `source.endec.*`: 
+- `source.apcupsd.*`: 
+- `source.azuracast.*`:
+
 TODO:
 - Log GroupMe API calls in Postgres, including origination source (Twilio, etc.)
 - Callback actions
@@ -49,6 +56,7 @@ import pika
 import pika.exceptions
 import pytz
 import emoji
+from colorlog import ColoredFormatter
 from flask import Flask, request
 from dotenv import load_dotenv
 
@@ -82,8 +90,8 @@ console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.DEBUG)
 
 
-class EasternTimeFormatter(logging.Formatter):
-    """Custom log formatter to display timestamps in Eastern Time"""
+class EasternTimeFormatter(ColoredFormatter):
+    """Custom log formatter to display timestamps in Eastern Time with colorized output"""
 
     def formatTime(self, record, datefmt=None):
         # Convert UTC to Eastern Time
@@ -94,10 +102,24 @@ class EasternTimeFormatter(logging.Formatter):
         return eastern_dt.isoformat()
 
 
-formatter = EasternTimeFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+# Define the formatter with color
+formatter = EasternTimeFormatter(
+    "%(log_color)s%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    log_colors={
+        "DEBUG": "white",
+        "INFO": "green",
+        "WARNING": "yellow",
+        "ERROR": "red",
+        "CRITICAL": "bold_red",
+    },
+)
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
+
+# Configure werkzeug logging to match
 logging.getLogger("werkzeug").setLevel(logging.INFO)
+logging.getLogger("werkzeug").addHandler(console_handler)
 
 app = Flask(__name__)
 
@@ -186,7 +208,7 @@ class StandardHandler(MessageSourceHandler):
 
     def process_message(self, body):
         logger.debug(
-            "Standard `process_message` called for UID: %s",
+            "Standard `process_message` called for: %s",
             body.get("wbor_message_id"),
         )
         self.send_message_to_groupme(body)
@@ -205,7 +227,7 @@ class StandardHandler(MessageSourceHandler):
         """
         body = message.get("body")
         uid = message.get("wbor_message_id")
-        logger.debug("Sending message with UID: %s: %s", uid, body)
+        logger.info("Sending message: %s: %s", uid, body)
 
         # Split the message into segments if it exceeds GroupMe's character limit
         if body:
@@ -237,7 +259,8 @@ class StandardHandler(MessageSourceHandler):
     @staticmethod
     def extract_images(message):
         """
-        Extract image URLs from the message response body and upload them to GroupMe's image service.
+        Extract image URLs from the message response body and upload them to GroupMe's image
+        service.
 
         Parameters:
         - message (dict): The standard message response body
@@ -273,23 +296,23 @@ class TwilioHandler(MessageSourceHandler):
         Process a text message from Twilio.
         """
         logger.debug(
-            "Twilio `process_message` called for UID: %s",
+            "Twilio `process_message` called for: %s",
             body.get("wbor_message_id"),
         )
         self.send_message_to_groupme(body)
 
         # Send acknowledgment back to wbor-twilio (the sender)
-        logger.debug("Sending acknowledgment for UID: %s", body["wbor_message_id"])
+        logger.debug("Sending acknowledgment for: %s", body["wbor_message_id"])
         ack_response = requests.post(
             ACK_URL,
             json={"wbor_message_id": body["wbor_message_id"]},
             timeout=3,
         )
         if ack_response.status_code == 200:
-            logger.info("Acknowledgment sent for UID: %s", body["wbor_message_id"])
+            logger.debug("Acknowledgment sent for: %s", body["wbor_message_id"])
         else:
             logger.error(
-                "Acknowledgment failed for UID: %s. Status: %s",
+                "Acknowledgment failed for: %s. Status: %s",
                 body["wbor_message_id"],
                 ack_response.status_code,
             )
@@ -316,7 +339,7 @@ class TwilioHandler(MessageSourceHandler):
         try:
             body = message.get("Body")
             uid = message.get("wbor_message_id")
-            logger.debug("Sending message with UID: %s: %s", uid, body)
+            logger.info("Sending message: %s: %s", uid, body)
 
             # Extract images from the message and upload them to GroupMe
             images, unsupported_type = TwilioHandler.extract_images(message)
@@ -545,9 +568,9 @@ class GroupMe:
 
         if response.status_code in {200, 202}:
             if body.get("text"):
-                logger.debug("Message sent successfully:\n\n%s\n", body.get("text"))
+                logger.info("Message sent successfully:\n\n%s\n", body.get("text"))
             elif body.get("picture_url"):
-                logger.debug("Image sent successfully: %s", body.get("picture_url"))
+                logger.info("Image sent successfully: %s", body.get("picture_url"))
         else:
             logger.error(
                 "Failed to send message: %s - %s", response.status_code, response.text
@@ -589,7 +612,7 @@ def callback(ch, method, _properties, body):
     - json.JSONDecodeError: If the message body is not valid JSON
     - KeyError: If the message body is missing required keys
     """
-    logger.info("Callback triggered.")
+    logger.debug("Callback triggered.")
 
     try:
         message = json.loads(body)
@@ -614,11 +637,11 @@ def callback(ch, method, _properties, body):
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
         # Handle differences in message body key capitalization due to Twilio API
-        if "Body" or "body" in message:
+        if "Body" in message or "body" in message:
             original_body = message.get("Body") or message.get("body")
             sanitized_body = MessageUtils.sanitize_string(original_body)
             if original_body != sanitized_body:
-                logger.warning(
+                logger.info(
                     "Sanitized unprintable characters in message body: %s -> %s",
                     original_body,
                     sanitized_body,
@@ -691,11 +714,10 @@ def consume_messages():
                     consumer_tag=f"{source}_consumer",
                 )
 
-            logger.info("Connected! Now ready to consume messages...")
+            logger.info("Connected to RabbitMQ! Ready to consume...")
             channel.start_consuming()
         except pika.exceptions.AMQPConnectionError as e:
-            logger.error("Failed to connect to RabbitMQ: %s", e)
-            logger.info("Retrying in 5 seconds...")
+            logger.error("(Retrying in 5 seconds) Failed to connect to RabbitMQ: %s", e)
             time.sleep(5)
 
 
@@ -725,7 +747,7 @@ def publish_to_queue(request_body, key):
         )
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
-        logger.debug("Connected!")
+        logger.info("RabbitMQ connected!")
 
         channel.exchange_declare(exchange=EXCHANGE, exchange_type="topic", durable=True)
         channel.basic_publish(
@@ -775,7 +797,7 @@ def publish_log_pg(message, statuscode, key="source.groupme", sub_key="log"):
         )
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
-        logger.debug("Connected!")
+        logger.info("RabbitMQ connected!")
 
         channel.exchange_declare(exchange=EXCHANGE, exchange_type="topic", durable=True)
         channel.basic_publish(
@@ -815,6 +837,61 @@ def publish_log_pg(message, statuscode, key="source.groupme", sub_key="log"):
         logger.error("JSON encoding error for message %s: %s", message, json_error)
 
 
+def ban(uid):
+    """
+    Ban a phone number from sending messages to the station.
+
+    Parameters:
+    - uid (str): The message UID of the person to ban
+
+    Returns:
+    - bool: True if the phone number was successfully banned, False otherwise
+    """
+    # 1. Get the phone number associated with the UID by searching the received messages logs
+    # - Fetch record & extract phone number
+    # 2. Add the phone number to the ban list table
+    # - Insert record
+    # 3. Eventually, clear all messages from the sender in the current message queue
+    # (that is shown on the dashboard)
+    logger.info("Banning phone number associated with UID: %s", uid)
+    return False
+
+
+def unban(uid):
+    """
+    Unban a phone number from sending messages to the station.
+
+    Parameters:
+    - uid (str): The message UID of the person to ban
+
+    Returns:
+    - bool: True if the phone number was successfully banned, False otherwise
+    """
+    # 1. Get the phone number associated with the UID by searching the received messages logs
+    # - Fetch record & extract phone number
+    # 2. Remove the phone number from the ban list table
+    # - Delete record
+    logger.info("Unbanning phone number associated with UID: %s", uid)
+    return False
+
+
+def get_stats(uid):
+    """
+    Retrieve message statistics for a phone number. Includes:
+    - Number of messages sent
+    - Number of images sent
+    - Last message sent
+    """
+    # 1. Get the phone number associated with the UID by searching the received messages logs
+    # - Fetch record & extract phone number
+    # 2. Fetch message statistics from the database
+    # - Query the message logs table
+    logger.info(
+        "Retrieving message statistics for phone number associated with UID: %s", uid
+    )
+    return False
+
+
 def parse_message(text):
     """
     Parse a GroupMe message sent by a group member.
@@ -846,55 +923,56 @@ def parse_message(text):
         elif command == "!ping":
             GroupMe.send_to_groupme({"text": f"Pong! UID: {uid_arg}"})
         elif command == "!ban":
-            # TODO: Implement ban functionality
-            GroupMe.send_to_groupme(
-                {
-                    "text": (
-                        "Ban functionality is not yet implemented. "
-                        "This will block a phone # from sending messages to the station. "
-                        f"UID: {uid_arg}"
-                    )
-                }
-            )
-
-            # if ban(uid):
-            #     GroupMe.send_to_groupme(
-            #         {
-            #             "text": f"Phone # associated with message UID {uid} has been banned from sending messages."
-            #         }
-            #     )
+            if ban(uid_arg):
+                GroupMe.send_to_groupme(
+                    {
+                        "text": f"Phone # associated with message UID {uid_arg} has been "
+                        "banned from sending messages."
+                    }
+                )
+            else:
+                GroupMe.send_to_groupme(
+                    {
+                        "text": (
+                            "Ban functionality is not yet implemented. "
+                            "This will block a phone # from sending messages to the station. "
+                            f"UID: {uid_arg}"
+                        )
+                    }
+                )
         elif command == "!unban":
-            # TODO: Implement unban functionality
-            GroupMe.send_to_groupme(
-                {
-                    "text": (
-                        "Unban functionality is not yet implemented. "
-                        "This will unblock a phone # from sending messages to the station. "
-                        f"UID: {uid_arg}"
-                    )
-                }
-            )
-
-            # if unban(uid):
-            #     GroupMe.send_to_groupme(
-            #         {
-            #             "text": f"Phone # associated with message UID {uid} has been UNBANNED from sending messages."
-            #         }
-            #     )
+            if unban(uid_arg):
+                GroupMe.send_to_groupme(
+                    {
+                        "text": f"Phone # associated with message UID {uid_arg} has "
+                        "been UNBANNED from sending messages."
+                    }
+                )
+            else:
+                GroupMe.send_to_groupme(
+                    {
+                        "text": (
+                            "Unban functionality is not yet implemented. "
+                            "This will unblock a phone # from sending messages to the station. "
+                            f"UID: {uid_arg}"
+                        )
+                    }
+                )
         elif command == "!stats":
-            # TODO: Implement stats functionality
-            GroupMe.send_to_groupme(
-                {
-                    "text": (
-                        "Stats functionality is not yet implemented. "
-                        "This will include information such as the # of messages sent by a #. "
-                        f"UID: {uid_arg}"
-                    )
-                }
-            )
-
-            # stats = get_stats(uid)
-            # send_stats(stats)
+            stats = get_stats(uid_arg)
+            if stats:
+                # send_stats(stats)
+                pass
+            else:
+                GroupMe.send_to_groupme(
+                    {
+                        "text": (
+                            "Stats functionality is not yet implemented. "
+                            "This will include information such as the # of messages sent by a #. "
+                            f"UID: {uid_arg}"
+                        )
+                    }
+                )
         else:
             GroupMe.send_to_groupme(
                 {
@@ -971,7 +1049,7 @@ def send_message():
     else:
         logger.debug("Using provided UID: %s", sender_uid)
 
-    logger.info("Publishing message to RabbitMQ with UID: %s", sender_uid)
+    logger.info("Publishing message to RabbitMQ: %s", sender_uid)
     publish_to_queue(body, "source.standard")
     return "OK"
 
