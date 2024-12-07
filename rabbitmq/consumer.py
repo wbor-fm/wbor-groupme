@@ -165,5 +165,9 @@ def consume_messages():
             logger.info("Connected to RabbitMQ! Ready to consume...")
             channel.start_consuming()
         except pika.exceptions.AMQPConnectionError as e:
-            logger.error("(Retrying in 5 seconds) Failed to connect to RabbitMQ: %s", e)
+            error_message = str(e)
+            logger.error("(Retrying in 5 seconds) Failed to connect to RabbitMQ: %s", error_message)
+            if "CONNECTION_FORCED" in error_message and "shutdown" in error_message:
+                logger.critical("Broker shut down the connection. Shutting down consumer.")
+                exit(1)  # Exit the process to avoid infinite retries
             time.sleep(5)
