@@ -25,7 +25,7 @@ class GroupMe:
     """
 
     @staticmethod
-    def upload_image(image_url):
+    def upload_image(image_url, uid):
         """
         Upload an image to GroupMe's image service.
 
@@ -85,6 +85,8 @@ class GroupMe:
             logger.warning(
                 "Upload failed: %s - %s", response.status_code, response.text
             )
+
+            publish_log_pg(image_response.content, response.status_code, uid)
             return None
         except requests.exceptions.RequestException as e:
             logger.error(

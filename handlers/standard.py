@@ -54,7 +54,7 @@ class StandardHandler(MessageSourceHandler):
             logger.error("Message body is missing, message not sent.")
 
         # Extract image URLs from the message and upload them to GroupMe
-        groupme_images, unsupported_type = StandardHandler.extract_images(message)
+        groupme_images, unsupported_type = StandardHandler.extract_images(message, uid)
 
         if groupme_images:
             GroupMe.send_images(groupme_images)
@@ -74,13 +74,14 @@ class StandardHandler(MessageSourceHandler):
             )
 
     @staticmethod
-    def extract_images(message):
+    def extract_images(message, uid):
         """
         Extract image URLs from the message response body and upload them to GroupMe's image
         service.
 
         Parameters:
         - message (dict): The standard message response body
+        - uid (str): The unique message ID
 
         Returns:
         - groupme_images (list): A list of image URLs from GroupMe's image service
@@ -92,7 +93,7 @@ class StandardHandler(MessageSourceHandler):
         groupme_images = []
         if images:
             for image_url in images:
-                upload_response = GroupMe.upload_image(image_url)
+                upload_response = GroupMe.upload_image(image_url, uid)
                 if upload_response is not None:
                     image_url = upload_response.get("payload", {}).get("url")
                     if image_url:

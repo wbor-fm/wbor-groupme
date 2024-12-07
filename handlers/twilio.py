@@ -71,7 +71,7 @@ class TwilioHandler(MessageSourceHandler):
             logger.debug("Sending message: %s: %s", uid, body)
 
             # Extract images from the message and upload them to GroupMe
-            images, unsupported_type = TwilioHandler.extract_images(message)
+            images, unsupported_type = TwilioHandler.extract_images(message, uid)
 
             # Split the message into segments if it exceeds GroupMe's character limit
             if body:
@@ -100,7 +100,7 @@ class TwilioHandler(MessageSourceHandler):
             logger.error("Failed to send message: %s", e)
 
     @staticmethod
-    def extract_images(message):
+    def extract_images(message, uid):
         """
         Extract image URLs from Twilio's message response body and upload them to GroupMe's image
         service.
@@ -110,6 +110,7 @@ class TwilioHandler(MessageSourceHandler):
 
         Parameters:
         - message (dict): The message response body from Twilio
+        - uid (str): The unique ID for the message
 
         Returns:
         - images (list): A list of image URLs from GroupMe's image service
@@ -121,7 +122,7 @@ class TwilioHandler(MessageSourceHandler):
         for i in range(10):
             media_url_key = f"MediaUrl{i}"
             if media_url_key in message:
-                upload_response = GroupMe.upload_image(message[media_url_key])
+                upload_response = GroupMe.upload_image(message[media_url_key], uid)
                 if upload_response is not None:
                     image_url = upload_response.get("payload", {}).get("url")
                     if image_url:
