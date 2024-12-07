@@ -16,8 +16,6 @@ def parse_message(text):
     """
     Parse a GroupMe message sent by a group member.
 
-    TODO: Put actual functionality in a separate class.
-
     Parameters:
     - text (str): The message text to parse
 

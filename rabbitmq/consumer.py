@@ -27,10 +27,6 @@ def callback(ch, method, _properties, body):
     - Sanitize the message body
     - Process the message using the appropriate handler
 
-    TODO:
-    - Logic based on key - currently just checking for "sms.incoming" but other sources
-      will need different keys
-
     Parameters:
     - body: The message body
 
@@ -103,9 +99,14 @@ def callback(ch, method, _properties, body):
         logger.debug("Handler query provided: `%s`", method.routing_key.split(".")[1])
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
 
-        # TODO: validate success of handler.process_message?
-        handler.process_message(message)
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+        # Validate success of handler.process_message
+        result = handler.process_message(message)
+        if result:
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            logger.info("Message processed and acknowledged.")
+        else:
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            logger.warning("Message processing failed. Message requeued.")
     except (json.JSONDecodeError, KeyError) as e:
         logger.error("Failed to execute callback: %s", e)
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)

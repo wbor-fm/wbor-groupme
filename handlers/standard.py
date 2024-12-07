@@ -17,6 +17,9 @@ class StandardHandler(MessageSourceHandler):
     - body (str): The message text
     - wbor_message_id (str): The unique message ID
     - images (list): A list of image URLs (optional)
+
+    Returns:
+    - bool: True if the message was successfully processed, False otherwise
     """
 
     def process_message(self, body):
@@ -25,7 +28,8 @@ class StandardHandler(MessageSourceHandler):
             body.get("wbor_message_id"),
         )
         self.send_message_to_groupme(body)
-        # Ack not needed
+        return True
+        # Ack (to other container) not needed, unlike Twilio
 
     @staticmethod
     def send_message_to_groupme(message):

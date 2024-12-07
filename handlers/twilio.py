@@ -19,6 +19,9 @@ class TwilioHandler(MessageSourceHandler):
     def process_message(self, body):
         """
         Process a text message from Twilio.
+
+        Returns:
+        - bool: True if the message was successfully processed, False otherwise
         """
         logger.debug(
             "Twilio `process_message` called for: %s",
@@ -35,12 +38,13 @@ class TwilioHandler(MessageSourceHandler):
         )
         if ack_response.status_code == 200:
             logger.debug("Acknowledgment sent for: %s", body["wbor_message_id"])
-        else:
-            logger.error(
-                "Acknowledgment failed for: %s. Status: %s",
-                body["wbor_message_id"],
-                ack_response.status_code,
-            )
+            return True
+        logger.error(
+            "Acknowledgment failed for: %s. Status: %s",
+            body["wbor_message_id"],
+            ack_response.status_code,
+        )
+        return False
 
     @staticmethod
     def send_message_to_groupme(message):

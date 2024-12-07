@@ -15,6 +15,7 @@ RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "wbor-rabbitmq")
 RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "guest")
 RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "source_exchange")
+RABBITMQ_DL_EXCHANGE = os.getenv("RABBITMQ_DL_EXCHANGE", "dead_letter_exchange")
 ACK_URL = os.getenv("ACK_URL", "http://wbor-twilio:5000/acknowledge")
 
 GROUPME_BOT_ID = os.getenv("GROUPME_BOT_ID")
