@@ -86,7 +86,12 @@ class GroupMe:
                 "Upload failed: %s - %s", response.status_code, response.text
             )
 
-            publish_log_pg(image_response.content, response.status_code, uid)
+            publish_log_pg(
+                image_response.content,
+                response.status_code,
+                uid,
+                key="source.groupme.img",
+            )
             return None
         except requests.exceptions.RequestException as e:
             logger.error(
@@ -197,4 +202,4 @@ class GroupMe:
             logger.error(
                 "Failed to send message: %s - %s", response.status_code, response.text
             )
-        publish_log_pg(body, response.status_code, uid)
+        publish_log_pg(body, response.status_code, uid, key="source.groupme.msg")
