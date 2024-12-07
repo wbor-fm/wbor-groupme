@@ -46,15 +46,26 @@ def callback(ch, method, _properties, body):
     try:
         message = json.loads(body)
         logger.debug("Received message: %s", message)
+
+        # "From" if from Twilio, "source" otherwise
         sender = message.get("From") or message.get("source")
 
+        # Verify required fields
+        # If both the sender and the message body (body or Body) are missing,
+        # the message is rejected using basic_nack with requeue=False (it won't be requeued).
+        # Twilio capitalizes `Body`, while other sources use `body`
         if not sender and (not message.get("body") or not message.get("Body")):
-            logger.warning("Not for us: %s", message)
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
         original_body = message.get("Body") or message.get("body")
         logger.info("Processing message from `%s`: %s", sender, original_body)
 
+        # Verify the message source
+        # Check for the correct message type and source
+        # Must be either an incoming SMS or a standard message
+        # Twilio messages don't have a source key, so we check for the type key instead
+        # (We only process incoming SMS messages from Twilio)
+        # Add other sources as needed in the future (e.g. AzuraCast)
         if (
             not message.get("type") == "sms.incoming"
             and not message.get("source") == "standard"
@@ -62,11 +73,14 @@ def callback(ch, method, _properties, body):
             logger.debug("message.type: %s", message.get("type"))
             logger.debug("message.source: %s", message.get("source"))
             logger.warning(
-                "Wrong key for us: %s, delivery_tag: %s", message, method.delivery_tag
+                "Matching condition not met: %s, delivery_tag: %s",
+                message,
+                method.delivery_tag,
             )
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
-        # Handle differences in message body key capitalization due to Twilio API
+
+        # Sanitize the message body
         if "Body" in message or "body" in message:
             original_body = message.get("Body") or message.get("body")
             sanitized_body = MessageUtils.sanitize_string(original_body)
@@ -81,12 +95,15 @@ def callback(ch, method, _properties, body):
             else:
                 message["body"] = sanitized_body
 
-        # Check for UID
+        # Generate a UUID if one is not provided
         if not message.get("wbor_message_id"):
             message["wbor_message_id"] = MessageUtils.gen_uuid()
 
+        # Determine and invoke the appropriate handler
         logger.debug("Handler query provided: `%s`", method.routing_key.split(".")[1])
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
+
+        # TODO: validate success of handler.process_message?
         handler.process_message(message)
         ch.basic_ack(delivery_tag=method.delivery_tag)
     except (json.JSONDecodeError, KeyError) as e:

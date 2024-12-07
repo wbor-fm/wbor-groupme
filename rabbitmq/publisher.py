@@ -28,7 +28,7 @@ def publish_to_queue(request_body, key):
     - None
     """
     try:
-        logger.debug("Attempting to connect to RabbitMQ...")
+        logger.debug("Connecting to RabbitMQ...")
         credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
         parameters = pika.ConnectionParameters(
             host=RABBITMQ_HOST,
@@ -42,6 +42,8 @@ def publish_to_queue(request_body, key):
         channel.exchange_declare(
             exchange=RABBITMQ_EXCHANGE, exchange_type="topic", durable=True
         )
+
+        logger.debug("Attempting to publish message with routing key: %s", key)
         channel.basic_publish(
             exchange=RABBITMQ_EXCHANGE,
             routing_key=key,
