@@ -35,6 +35,10 @@ def publish_message(
     Returns:
     - None
     """
+
+    # Append "source." to the routing key
+    routing_key = f"source.{routing_key}"
+
     try:
         logger.debug("Connecting to RabbitMQ...")
         credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
@@ -86,7 +90,7 @@ def publish_message(
         logger.error("JSON encoding error for message %s: %s", request_body, e)
 
 
-def publish_log_pg(message, statuscode, uid, key="source.groupme", sub_key="log"):
+def publish_log_pg(message, statuscode, uid, key="groupme", sub_key="log"):
     """
     Log message actions in Postgres by publishing to the RabbitMQ exchange.
 

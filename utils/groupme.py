@@ -90,7 +90,7 @@ class GroupMe:
                 image_response.content,
                 response.status_code,
                 uid,
-                key="source.groupme.img",
+                key="groupme.img",
             )
             return None
         except requests.exceptions.RequestException as e:
@@ -202,4 +202,4 @@ class GroupMe:
             logger.error(
                 "Failed to send message: %s - %s", response.status_code, response.text
             )
-        publish_log_pg(body, response.status_code, uid, key="source.groupme.msg")
+        publish_log_pg(body, response.status_code, uid, key="groupme.msg")
