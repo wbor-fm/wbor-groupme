@@ -53,8 +53,6 @@ from routes.groupme import groupme
 from routes.send import send
 
 logger = configure_logging()
-# logging.getLogger("werkzeug").setLevel(logging.INFO)
-# logging.getLogger("werkzeug").addHandler(console_handler)
 
 app = Flask(__name__)
 app.register_blueprint(base)

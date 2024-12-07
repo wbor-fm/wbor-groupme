@@ -46,4 +46,9 @@ def configure_logging(logger_name="wbor_groupme"):
     )
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
+
+    werkzeug_logger = logging.getLogger("werkzeug")
+    werkzeug_logger.setLevel(logging.INFO)
+    werkzeug_logger.addHandler(console_handler)
+
     return logger
