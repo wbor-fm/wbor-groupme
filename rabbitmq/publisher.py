@@ -95,6 +95,10 @@ def publish_log_pg(body, source, statuscode, uid, routing_key="groupme", sub_key
     - routing_key (str): The routing key for the body, defaults to "groupme"
     - sub_key (str): The sub-key for the body, defaults to "log"
     """
+    if not isinstance(body, dict):
+        logger.error("Invalid body type for publish_log_pg: %s", type(body))
+        return
+
     publish_message(
         request_body={
             **body,

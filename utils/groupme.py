@@ -87,10 +87,12 @@ class GroupMe:
 
                 # Log the API interaction in Postgres
                 publish_log_pg(
-                    image_response.content,
-                    source,
-                    response.status_code,
-                    uid,
+                    body={
+                        "raw_content": str(image_response.content)
+                    },  # Wrap bytes in a dictionary
+                    source=source,
+                    statuscode=response.status_code,
+                    uid=uid,
                     routing_key="groupme.img",
                 )
                 return response.json()
