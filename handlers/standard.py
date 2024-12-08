@@ -4,6 +4,7 @@ Standard message processing and forwarding, e.g. for the UPS/AzuraCast/etc. sour
 
 from utils.logging import configure_logging
 from utils.groupme import GroupMe
+from rabbitmq.publisher import publish_log_pg
 from .base import MessageSourceHandler
 
 logger = configure_logging(__name__)
@@ -24,7 +25,7 @@ class StandardHandler(MessageSourceHandler):
     - bool: True if the message was successfully processed, False otherwise
     """
 
-    def process_message(self, body, subkey):
+    def process_message(self, body, subkey, alreadysent=False):
         subkey = subkey or None
 
         logger.debug(
@@ -34,6 +35,20 @@ class StandardHandler(MessageSourceHandler):
         logger.debug("Subkey: %s", subkey)
         logger.debug("Type: %s", body.get("type"))
         # TODO: decide on keeping type field embedded in the message body versus using the subkey
+
+        # If the message was already sent, skip sending and just log the API interaction
+        # TODO: check if this handles images?
+        if alreadysent:
+            logger.info("Message already sent: %s", body.get("wbor_message_id"))
+            publish_log_pg(
+                body,
+                source=body.get("source"),
+                statuscode=body.get("statuscode"),
+                uid=body.get("wbor_message_id"),
+                routing_key="groupme.msg",
+            )
+            return True
+
         self.send_message_to_groupme(
             body,
             body.get("wbor_message_id"),

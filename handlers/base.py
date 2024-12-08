@@ -13,7 +13,7 @@ class MessageSourceHandler:
     Base class for message source handlers.
     """
 
-    def process_message(self, body, subkey):
+    def process_message(self, body, subkey, alreadysent=False):
         """
         Logic to process a message from the source.
         """

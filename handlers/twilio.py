@@ -16,7 +16,7 @@ class TwilioHandler(MessageSourceHandler):
     Handles Twilio-specific message processing and forwarding.
     """
 
-    def process_message(self, body, subkey):
+    def process_message(self, body, subkey, _alreadysent=False):
         """
         Process a text message from Twilio.
 

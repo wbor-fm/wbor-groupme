@@ -22,12 +22,12 @@ from .handlers import MESSAGE_HANDLERS, SOURCES
 logger = configure_logging(__name__)
 
 
-def callback(ch, method, _properties, body):
+def callback(ch, method, properties, body):
     """
     Callback function to process messages from the RabbitMQ queue.
 
     Treatment for all messages:
-    - Sanitize the message body
+    - Sanitize the message body (for unsent messages)
     - Process the message using the appropriate handler
 
     Parameters:
@@ -78,19 +78,21 @@ def callback(ch, method, _properties, body):
             return
 
         # Sanitize the message body
-        if "Body" in message or "body" in message:
-            original_body = message.get("Body") or message.get("body")
-            sanitized_body = MessageUtils.sanitize_string(original_body)
-            if original_body != sanitized_body:
-                logger.info(
-                    "Sanitized unprintable characters in message body: %s -> %s",
-                    original_body,
-                    sanitized_body,
-                )
-            if message.get("Body"):
-                message["Body"] = sanitized_body
-            else:
-                message["body"] = sanitized_body
+        alreadysent = properties.headers.get("alreadysent", False)
+        if not alreadysent:
+            if "Body" in message or "body" in message:
+                original_body = message.get("Body") or message.get("body")
+                sanitized_body = MessageUtils.sanitize_string(original_body)
+                if original_body != sanitized_body:
+                    logger.info(
+                        "Sanitized unprintable characters in message body: %s -> %s",
+                        original_body,
+                        sanitized_body,
+                    )
+                if message.get("Body"):
+                    message["Body"] = sanitized_body
+                else:
+                    message["body"] = sanitized_body
 
         # Generate a UUID if one is not provided
         if not message.get("wbor_message_id"):
@@ -107,7 +109,7 @@ def callback(ch, method, _properties, body):
         reconstructed_subkey = ".".join(subkey)
 
         # Validate success of handler.process_message
-        result = handler.process_message(message, reconstructed_subkey)
+        result = handler.process_message(message, reconstructed_subkey, alreadysent)
         if result:
             ch.basic_ack(delivery_tag=method.delivery_tag)
             logger.info(
