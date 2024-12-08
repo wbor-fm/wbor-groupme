@@ -36,7 +36,6 @@ Source keys:
 - `source.azuracast.*`:
 
 TODO:
-- Log GroupMe API calls in Postgres, including origination source (Twilio, etc.)
 - Callback actions
     - Block sender based on the message's UID
     - Implement message statistics tracking and retrieval
