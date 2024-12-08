@@ -4,7 +4,7 @@ Module for GroupMe API endpoints.
 
 from flask import Blueprint, request
 from utils.logging import configure_logging
-from utils.groupme import GroupMe
+from utils.command_parser import CommandParser
 from rabbitmq.publisher import publish_log_pg
 
 logger = configure_logging(__name__)
@@ -22,7 +22,7 @@ def groupme_callback():
     if sender_type != "bot":
         logger.info("GroupMe callback received: %s", body)
         text = body.get("text")
-        GroupMe.parse_message(text)
+        CommandParser.parse_message(text)
         publish_log_pg(
             body,
             source="groupme.callback",

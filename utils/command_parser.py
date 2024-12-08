@@ -11,6 +11,23 @@ class CommandParser:
     A class to parse and execute GroupMe commands.
     """
 
+    @staticmethod
+    def parse_message(text):
+        """
+        Parse a GroupMe message sent by a group member.
+
+        Parameters:
+        - text (str): The message text to parse
+
+        Returns:
+        - None
+        """
+        if not text.startswith("!"):
+            return
+
+        command_parser = CommandParser(GroupMe)
+        command_parser.execute_command(text)
+
     def execute_command(self, text):
         """
         Parse and execute a GroupMe command.

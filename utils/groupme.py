@@ -6,7 +6,6 @@ import time
 import requests
 from utils.logging import configure_logging
 from utils.message import MessageUtils
-from utils.command_parser import CommandParser
 from rabbitmq.publisher import publish_log_pg
 from config import (
     GROUPCHAT_NAME,
@@ -24,23 +23,6 @@ class GroupMe:
     """
     Handles GroupMe-specific message sending and processing.
     """
-
-    @staticmethod
-    def parse_message(text):
-        """
-        Parse a GroupMe message sent by a group member.
-
-        Parameters:
-        - text (str): The message text to parse
-
-        Returns:
-        - None
-        """
-        if not text.startswith("!"):
-            return
-
-        command_parser = CommandParser(GroupMe)
-        command_parser.execute_command(text)
 
     @staticmethod
     def upload_image(
