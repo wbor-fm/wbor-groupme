@@ -11,7 +11,7 @@ APP_PORT = os.getenv("APP_PORT", "2000")
 APP_PASSWORD = os.getenv("APP_PASSWORD")
 GROUPCHAT_NAME = os.getenv("GROUPCHAT_NAME", "WBOR MGMT")
 
-RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "wbor-rabbitmq")
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
 RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "guest")
 RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "source_exchange")
