@@ -25,7 +25,9 @@ class GroupMe:
     """
 
     @staticmethod
-    def upload_image(image_url, source, uid, access_token=GROUPME_ACCESS_TOKEN):
+    def upload_image(
+        image_url, source, uid, access_token=GROUPME_ACCESS_TOKEN, bot_id=GROUPME_BOT_ID
+    ):
         """
         Upload an image to GroupMe's image service.
 
@@ -88,7 +90,9 @@ class GroupMe:
                 # Log the API interaction in Postgres
                 publish_log_pg(
                     body={
-                        "raw_img": str(image_response.content)
+                        "raw_img": str(image_response.content),
+                        "bot_id": bot_id,
+                        "text": "",  # Empty text for image uploads
                     },  # Wrap bytes in a dictionary
                     source=source,
                     statuscode=response.status_code,
