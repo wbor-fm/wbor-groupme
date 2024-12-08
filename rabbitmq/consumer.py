@@ -7,10 +7,10 @@ import time
 import sys
 import pika
 import pika.exceptions
-from config import TWILIO_SOURCE
 from utils.logging import configure_logging
 from utils.message import MessageUtils
 from config import (
+    TWILIO_SOURCE,
     RABBITMQ_HOST,
     RABBITMQ_USER,
     RABBITMQ_PASS,
