@@ -31,6 +31,7 @@ class StandardHandler(MessageSourceHandler):
         )
         logger.debug("Subkey: %s", subkey)
         logger.debug("Type: %s", body.get("type"))
+        # TODO: decide on keeping type field embedded in the message body versus using the subkey
         self.send_message_to_groupme(
             body,
             body.get("wbor_message_id"),

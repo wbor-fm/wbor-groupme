@@ -103,15 +103,21 @@ def callback(ch, method, _properties, body):
 
         # `source.twilio.sms.incoming` -> `sms.incoming`
         subkey = method.routing_key.split(".")[2:]
+        reconstructed_subkey = ".".join(subkey)
 
         # Validate success of handler.process_message
-        result = handler.process_message(message, subkey)
+        result = handler.process_message(message, reconstructed_subkey)
         if result:
             ch.basic_ack(delivery_tag=method.delivery_tag)
-            logger.info("Message processed and acknowledged.")
+            logger.info(
+                "Message processed and acknowledged: %s", message.get("wbor_message_id")
+            )
         else:
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
-            logger.warning("Message processing failed. Message requeued.")
+            logger.warning(
+                "Message processing failed. Message requeued: %s",
+                message.get("wbor_message_id"),
+            )
     except (json.JSONDecodeError, KeyError) as e:
         logger.error("Failed to execute callback: %s", e)
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)

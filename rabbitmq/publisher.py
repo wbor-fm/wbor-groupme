@@ -46,7 +46,7 @@ def publish_message(
         )
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
-        logger.debug("RabbitMQ connected!")
+        logger.debug("RabbitMQ connected! Ready to publish message.")
         assert_exchange(channel)
 
         logger.debug("Attempting to publish message with routing key: %s", routing_key)
