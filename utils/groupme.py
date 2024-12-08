@@ -239,6 +239,7 @@ class GroupMe:
                 )
 
             # Log the API interaction in Postgres
+            logger.debug("Publishing log to RabbitMQ: %s", uid)
             publish_log_pg(
                 body, source, response.status_code, uid, routing_key="groupme.msg"
             )
