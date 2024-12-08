@@ -49,7 +49,7 @@ def send_message():
             "Unauthorized access attempt with password: %s", body.get("password")
         )
         return "Unauthorized"
-    body.remove("password")  # Strip password from the request body - no longer needed
+    body.pop("password", None)  # Strip password from the request body - no longer needed
     logger.info("Send callback received: %s", body)
 
     # Check required fields
