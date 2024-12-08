@@ -7,6 +7,7 @@ import pika
 import pika.exceptions
 from utils.logging import configure_logging
 from config import RABBITMQ_HOST, RABBITMQ_USER, RABBITMQ_PASS, RABBITMQ_EXCHANGE
+from rabbitmq.util import assert_exchange
 
 
 logger = configure_logging(__name__)
@@ -19,17 +20,13 @@ def publish_message(
     extra_properties=None,
 ):
     """
-    Publish a message to the RabbitMQ queue.
+    Publish a message to RabbitMQ.
 
     Parameters:
     - request_body (dict): The message request body to publish
-        - Example: For queue messages, it includes 'body', 'wbor_message_id',
-            'images' (if applicable)
-        - Example: For logs, it includes 'message', 'code', and 'type'
     - routing_key (str): The routing key for the message
-        - e.g. "source.twilio", "source.standard", "source.groupme.log"
-            - In this case, `twilio` is published in the wbor-twilio service
-    - connection_name (str): Name for the RabbitMQ connection
+        - e.g. `standard` from /send
+    - connection_name (str): RabbitMQ connection name (default: "GroupMePublisherConnection")
     - extra_properties (dict, optional): Additional properties for the message (e.g., headers)
 
     Returns:
@@ -46,23 +43,17 @@ def publish_message(
             host=RABBITMQ_HOST,
             credentials=credentials,
             client_properties={"connection_name": connection_name},
-            # client_properties={"connection_name": "GroupMePublisherConnection"},
         )
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
         logger.debug("RabbitMQ connected!")
-
-        channel.exchange_declare(
-            exchange=RABBITMQ_EXCHANGE, exchange_type="topic", durable=True
-        )
+        assert_exchange(channel)
 
         logger.debug("Attempting to publish message with routing key: %s", routing_key)
         properties = pika.BasicProperties(
             headers={"x-retry-count": 0},  # Initialize retry count for other consumers
             delivery_mode=2,  # Make the message persistent
         )
-
-        # Add extra properties if provided
         if extra_properties:
             properties.headers.update(extra_properties)
 
@@ -76,13 +67,7 @@ def publish_message(
         connection.close()
     except pika.exceptions.AMQPConnectionError as e:
         logger.error(
-            'Connection error when publishing to exchange with routing key "source.%s": %s',
-            routing_key,
-            e,
-        )
-    except pika.exceptions.AMQPChannelError as e:
-        logger.error(
-            'Channel error when publishing to exchange with routing key "source.%s": %s',
+            'Connection error when publishing to exchange with routing key "%s": %s',
             routing_key,
             e,
         )
@@ -90,21 +75,30 @@ def publish_message(
         logger.error("JSON encoding error for message %s: %s", request_body, e)
 
 
-def publish_log_pg(message, statuscode, uid, key="groupme", sub_key="log"):
+def publish_log_pg(body, source, statuscode, uid, routing_key="groupme", sub_key="log"):
     """
     Log message actions in Postgres by publishing to the RabbitMQ exchange.
 
+    `groupme.img` are image service API calls, whereas,
+    `groupme.msg` are GroupMe message service API calls.
+
     Parameters:
-    - message (dict): The message to publish
-    - routing_key (str): The routing key for the message
+    - body (dict): The body to publish
+    - source (str): The source of the body
+        - e.g. "groupme", "twilio", "standard"
+    - statuscode (int): The status code of the body
+    - uid (str): The unique identifier for the body
+    - routing_key (str): The routing key for the body, defaults to "groupme"
+    - sub_key (str): The sub-key for the body, defaults to "log"
     """
     publish_message(
         request_body={
-            **message,
+            **body,
+            "source": source,
             "code": statuscode,
             "type": sub_key,
             "uid": uid,
         },
-        routing_key=key,
+        routing_key=routing_key,
         connection_name="GroupMeLogPublisherConnection",
     )

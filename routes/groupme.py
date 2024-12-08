@@ -41,3 +41,4 @@ def groupme_callback():
         text = body.get("text")
         parse_message(text)
     return "OK"
+    # TODO: log callbacks

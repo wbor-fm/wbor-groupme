@@ -39,7 +39,6 @@ def callback(ch, method, _properties, body):
     - json.JSONDecodeError: If the message body is not valid JSON
     - KeyError: If the message body is missing required keys
     """
-    logger.debug("Callback triggered.")
 
     try:
         message = json.loads(body)
@@ -51,7 +50,7 @@ def callback(ch, method, _properties, body):
         sender = message.get("From") or message.get("source")
 
         # If both the sender and the message body (body or Body) are missing,
-        # the message is rejected using basic_nack with requeue=False (it won't be requeued).
+        # the message is rejected and it won't be requeued.
         # Twilio capitalizes `Body`, while other sources use `body`
         if not sender and (not message.get("body") or not message.get("Body")):
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
@@ -59,17 +58,15 @@ def callback(ch, method, _properties, body):
         original_body = message.get("Body") or message.get("body")
         logger.info("Processing message from `%s`: %s", sender, original_body)
 
-        # Verify the message source
-        # Check for the correct message type and source
+        # Verify the message type and source
         # Must be either an incoming SMS or a standard message
-        # Twilio messages don't have a source key, so we check for the type key instead
-        # (We only process incoming SMS messages from Twilio - not outgoing, yet)
+
         # Add other sources as needed in the future (e.g. AzuraCast)
         if (
-            not message.get("type") == "sms.incoming" # Added in the wbor-twilio /sms endpoint
+            not message.get("source")
+            == "twilio"  # Added in the wbor-twilio /sms endpoint
             and not message.get("source") == "standard"
         ):
-            logger.debug("message.type: %s", message.get("type"))
             logger.debug("message.source: %s", message.get("source"))
             logger.warning(
                 "Matching condition not met: %s, delivery_tag: %s",
@@ -99,12 +96,16 @@ def callback(ch, method, _properties, body):
             message["wbor_message_id"] = MessageUtils.gen_uuid()
 
         # Determine and invoke the appropriate handle
-        # Note that the routing key[1] is the same as the body source field
+        # NOTE that the routing key[1] is the same as the body source field
         logger.debug("Handler query provided: `%s`", method.routing_key.split(".")[1])
+        # `source.twilio.#` -> `twilio` or `source.standard.#` -> `standard`
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
 
+        # `source.twilio.sms.incoming` -> `sms.incoming`
+        subkey = method.routing_key.split(".")[2:]
+
         # Validate success of handler.process_message
-        result = handler.process_message(message)
+        result = handler.process_message(message, subkey)
         if result:
             ch.basic_ack(delivery_tag=method.delivery_tag)
             logger.info("Message processed and acknowledged.")
@@ -118,8 +119,10 @@ def callback(ch, method, _properties, body):
 
 def consume_messages():
     """
-    Consume messages from the RabbitMQ queue. Sets up the connection and channel for each source.
-    Binds the queue to the exchange and starts consuming messages, calling callback().
+    Consume messages from the RabbitMQ queues.
+
+    Sets up the connection and channel for each source, defined in SOURCES.
+    Binds the queue to the EXCHANGE and starts consuming messages via callback.
 
     The callback function processes the message and acknowledges it if successful.
     """
@@ -159,7 +162,7 @@ def consume_messages():
                     consumer_tag=f"{source}_consumer",
                 )
 
-            logger.info("Connected to RabbitMQ! Ready to consume...")
+            logger.info("Connected to RabbitMQ & queues bound. Now consuming...")
             channel.start_consuming()
         except pika.exceptions.AMQPConnectionError as conn_error:
             error_message = str(conn_error)
