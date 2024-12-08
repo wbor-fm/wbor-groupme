@@ -62,9 +62,14 @@ def send_message():
         return "Bad Request"
 
     # Ensure any other fields are either `images` or `wbor_message_id`
-    extra_fields = [field for field in body.keys() if field not in required_fields]
+    allowed_optional_fields = ["images", "wbor_message_id"]
+    extra_fields = [
+        field
+        for field in body.keys()
+        if field not in required_fields + allowed_optional_fields
+    ]
     if extra_fields and extra_fields not in ["images", "wbor_message_id"]:
-        logger.error("Bad Request: Unexpected fields: %s", extra_fields)
+        logger.error("Unexpected fields: %s", extra_fields)
         return "Bad Request"
 
     # Generate or use the provided UID
