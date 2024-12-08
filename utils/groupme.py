@@ -94,6 +94,7 @@ class GroupMe:
                     statuscode=response.status_code,
                     uid=uid,
                     routing_key="groupme.img",
+                    sub_key="img",
                 )
                 return response.json()
             logger.warning(
@@ -106,6 +107,7 @@ class GroupMe:
                 response.status_code,
                 uid,
                 routing_key="groupme.img",
+                sub_key="img",
             )
             return None
         except requests.exceptions.RequestException as e:
