@@ -88,7 +88,7 @@ class GroupMe:
                 # Log the API interaction in Postgres
                 publish_log_pg(
                     body={
-                        "raw_content": str(image_response.content)
+                        "raw_img": str(image_response.content)
                     },  # Wrap bytes in a dictionary
                     source=source,
                     statuscode=response.status_code,
