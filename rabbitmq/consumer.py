@@ -184,4 +184,9 @@ def consume_messages():
                     "Broker shut down the connection. Shutting down consumer."
                 )
                 sys.exit(1)  # Exit the process to avoid infinite retries
+            if "ACCESS_REFUSED" in error_message:
+                logger.critical(
+                    "Access refused. Check RabbitMQ user permissions. Shutting down consumer."
+                )
+                sys.exit(1)
             time.sleep(5)
