@@ -7,7 +7,6 @@ import time
 import sys
 import pika
 import pika.exceptions
-import requests
 from utils.logging import configure_logging
 from utils.message import MessageUtils
 from config import (
@@ -16,6 +15,7 @@ from config import (
     RABBITMQ_PASS,
     RABBITMQ_EXCHANGE,
 )
+from .util import assert_exchange
 from .handlers import MESSAGE_HANDLERS, SOURCES
 
 logger = configure_logging(__name__)
@@ -45,10 +45,11 @@ def callback(ch, method, _properties, body):
         message = json.loads(body)
         logger.debug("Received message: %s", message)
 
+        # Verify required fields
+
         # "From" if from Twilio, "source" otherwise
         sender = message.get("From") or message.get("source")
 
-        # Verify required fields
         # If both the sender and the message body (body or Body) are missing,
         # the message is rejected using basic_nack with requeue=False (it won't be requeued).
         # Twilio capitalizes `Body`, while other sources use `body`
@@ -62,10 +63,10 @@ def callback(ch, method, _properties, body):
         # Check for the correct message type and source
         # Must be either an incoming SMS or a standard message
         # Twilio messages don't have a source key, so we check for the type key instead
-        # (We only process incoming SMS messages from Twilio)
+        # (We only process incoming SMS messages from Twilio - not outgoing, yet)
         # Add other sources as needed in the future (e.g. AzuraCast)
         if (
-            not message.get("type") == "sms.incoming"
+            not message.get("type") == "sms.incoming" # Added in the wbor-twilio /sms endpoint
             and not message.get("source") == "standard"
         ):
             logger.debug("message.type: %s", message.get("type"))
@@ -97,7 +98,8 @@ def callback(ch, method, _properties, body):
         if not message.get("wbor_message_id"):
             message["wbor_message_id"] = MessageUtils.gen_uuid()
 
-        # Determine and invoke the appropriate handler
+        # Determine and invoke the appropriate handle
+        # Note that the routing key[1] is the same as the body source field
         logger.debug("Handler query provided: `%s`", method.routing_key.split(".")[1])
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
 
@@ -111,9 +113,6 @@ def callback(ch, method, _properties, body):
             logger.warning("Message processing failed. Message requeued.")
     except (json.JSONDecodeError, KeyError) as e:
         logger.error("Failed to execute callback: %s", e)
-        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
-    except requests.exceptions.ReadTimeout as e:
-        logger.error("Failed to send acknowledgment: %s", e)
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
 
@@ -135,11 +134,7 @@ def consume_messages():
         try:
             connection = pika.BlockingConnection(parameters)
             channel = connection.channel()
-
-            # Assert that the primary exchange exists
-            channel.exchange_declare(
-                exchange=RABBITMQ_EXCHANGE, exchange_type="topic", durable=True
-            )
+            assert_exchange(channel)
 
             # Declare and bind queues dynamically
             for source, routing_key in SOURCES.items():
