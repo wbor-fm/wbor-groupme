@@ -49,7 +49,9 @@ def send_message():
             "Unauthorized access attempt with password: %s", body.get("password")
         )
         return "Unauthorized"
-    body.pop("password", None)  # Strip password from the request body - no longer needed
+    body.pop(
+        "password", None
+    )  # Strip password from the request body - no longer needed
     logger.info("Send callback received: %s", body)
 
     # Check required fields
@@ -76,6 +78,6 @@ def send_message():
 
     # At this point, we know the request body is valid
     # The only remaining fields are `body`, `source`, `images`, and `wbor_message_id`
-    logger.info("Publishing to RabbitMQ: %s", sender_uid)
+    logger.info("Publishing to RabbitMQ: %s: %s", sender_uid, body)
     publish_message(body, body.get("source"))
     return "OK"

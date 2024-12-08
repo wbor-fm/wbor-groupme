@@ -160,8 +160,8 @@ class GroupMe:
                 "text": f'{segment_label}"{segment}"{end_marker}',
             }
             GroupMe.send_to_groupme(data, source, uid=uid)
-            logger.info(
-                "%s: Text segment (%d/%d) sent for %s: %s",
+            logger.debug(
+                "`%s`: Text segment (%d/%d) sent for %s: %s",
                 source,
                 index,
                 total_segments,
@@ -239,7 +239,7 @@ class GroupMe:
                 )
 
             # Log the API interaction in Postgres
-            logger.debug("Publishing log to RabbitMQ: %s", uid)
+            logger.debug("Publishing send log to RabbitMQ: %s", uid)
             publish_log_pg(
                 body, source, response.status_code, uid, routing_key="groupme.msg"
             )

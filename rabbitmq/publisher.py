@@ -49,7 +49,9 @@ def publish_message(
         logger.debug("RabbitMQ connected! Ready to publish message.")
         assert_exchange(channel)
 
-        logger.debug("Attempting to publish message with routing key: %s", routing_key)
+        logger.debug(
+            "Attempting to publish message with routing key: `%s`", routing_key
+        )
         properties = pika.BasicProperties(
             headers={"x-retry-count": 0},  # Initialize retry count for other consumers
             delivery_mode=2,  # Make the message persistent
@@ -64,7 +66,7 @@ def publish_message(
             properties=properties,
         )
         logger.info(
-            "Message publishe with routing key `%s`: %s", routing_key, request_body
+            "Message published with routing key `%s`: %s", routing_key, request_body
         )
         connection.close()
     except pika.exceptions.AMQPConnectionError as e:
