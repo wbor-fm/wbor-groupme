@@ -6,6 +6,7 @@ from flask import Blueprint, request
 from utils.logging import configure_logging
 from utils.groupme import GroupMe
 from utils.command_parser import CommandParser
+from rabbitmq.publisher import publish_log_pg
 
 logger = configure_logging(__name__)
 
@@ -40,5 +41,11 @@ def groupme_callback():
         logger.info("GroupMe callback received: %s", body)
         text = body.get("text")
         parse_message(text)
+        publish_log_pg(
+            body,
+            source="groupme.callback",
+            statuscode=200,
+            uid=body.get("source_guid"),
+            routing_key="groupme.callback",
+        )
     return "OK"
-    # TODO: log callbacks

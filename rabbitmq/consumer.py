@@ -7,6 +7,7 @@ import time
 import sys
 import pika
 import pika.exceptions
+from config import TWILIO_SOURCE
 from utils.logging import configure_logging
 from utils.message import MessageUtils
 from config import (
@@ -64,7 +65,7 @@ def callback(ch, method, _properties, body):
         # Add other sources as needed in the future (e.g. AzuraCast)
         if (
             not message.get("source")
-            == "twilio"  # Added in the wbor-twilio /sms endpoint
+            == TWILIO_SOURCE  # Added in the wbor-twilio /sms endpoint
             and not message.get("source") == "standard"
         ):
             logger.debug("message.source: %s", message.get("source"))

@@ -26,7 +26,7 @@ class StandardHandler(MessageSourceHandler):
 
     def process_message(self, body, subkey):
         subkey = subkey or None
-        
+
         logger.debug(
             "Standard `process_message` called for: %s",
             body.get("wbor_message_id"),

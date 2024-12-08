@@ -3,7 +3,7 @@ Module for handling Twilio-specific message processing and forwarding.
 """
 
 import requests
-from config import ACK_URL
+from config import ACK_URL, TWILIO_SOURCE
 from utils.logging import configure_logging
 from utils.groupme import GroupMe
 from .base import MessageSourceHandler
@@ -37,7 +37,7 @@ class TwilioHandler(MessageSourceHandler):
         logger.debug("Subkey: %s", subkey)
         logger.debug("Type: %s", body.get("type"))
         self.send_message_to_groupme(
-            body, body.get("wbor_message_id"), self.extract_images, source="twilio"
+            body, body.get("wbor_message_id"), self.extract_images, source=TWILIO_SOURCE
         )
 
         # Send ack back to wbor-twilio (the sender)
