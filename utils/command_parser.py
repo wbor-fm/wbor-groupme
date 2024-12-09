@@ -11,6 +11,18 @@ class CommandParser:
     A class to parse and execute GroupMe commands.
     """
 
+    def __init__(self, groupme):
+        """
+        Initialize the CommandParser class.
+
+        Parameters:
+        - groupme (GroupMe): The GroupMe class to send messages to
+
+        Returns:
+        - None
+        """
+        self.groupme = groupme
+
     @staticmethod
     def parse_message(text):
         """
