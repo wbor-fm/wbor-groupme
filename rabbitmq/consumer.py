@@ -144,6 +144,9 @@ def callback(ch, method, properties, body):
             reply_to = properties.reply_to
             correlation_id = properties.correlation_id
             if reply_to and correlation_id:
+                logger.debug(
+                    "Sending acknowledgment for: %s", message.get("wbor_message_id")
+                )
                 send_acknowledgment(message, reply_to, correlation_id)
 
             ch.basic_ack(delivery_tag=method.delivery_tag)
