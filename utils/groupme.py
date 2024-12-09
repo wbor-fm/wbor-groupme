@@ -104,7 +104,6 @@ class GroupMe:
             logger.warning(
                 "Image upload failed: %s - %s", response.status_code, response.text
             )
-
             publish_log_pg(
                 image_response.content,
                 source,

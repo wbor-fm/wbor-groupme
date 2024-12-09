@@ -12,9 +12,7 @@ logger = configure_logging(__name__)
 
 class StandardHandler(MessageSourceHandler):
     """
-    Bound to queue `source.standard`.
-
-    Catch-all message processing and forwarding, e.g. for the UPS/AzuraCast/etc. sources.
+    Bound to key `source.standard`.
 
     The request body is expected to include the following fields:
     - body (str): The message text
@@ -37,7 +35,7 @@ class StandardHandler(MessageSourceHandler):
         # TODO: decide on keeping type field embedded in the message body versus using the subkey
 
         # If the message was already sent, skip sending and just log the API interaction
-        # TODO: check if this handles images?
+        # TODO: there's a chance the downstream producer had image API interactions as well
         if alreadysent:
             logger.info("Message already sent: %s", body.get("wbor_message_id"))
             publish_log_pg(

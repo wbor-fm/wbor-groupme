@@ -8,7 +8,8 @@ from handlers.standard import StandardHandler
 # Define message handlers for each source
 # Each handler should implement the `process_message` method
 # These handlers are used to process messages from the RabbitMQ queue based on the routing key
-# e.g. "source.twilio.*" -> TwilioHandler(), "source.standard.*" -> StandardHandler()
+# e.g.: "source.twilio.*" -> TwilioHandler(), 
+#       "source.standard.*" -> StandardHandler()
 MESSAGE_HANDLERS = {
     "twilio": TwilioHandler(), 
     "standard": StandardHandler()
