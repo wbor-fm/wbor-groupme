@@ -28,4 +28,4 @@ GROUPME_IMAGE_API = "https://image.groupme.com/pictures"
 
 
 # Define a blocklist for routing keys
-BLOCKLIST = ["twilio.sms.outgoing"]
+BLOCKLIST = ["twilio.sms.outgoing", "twilio.call-events", "twilio.voice-intelligence"]
