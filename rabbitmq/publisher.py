@@ -113,7 +113,7 @@ def publish_log_pg(body, source, statuscode, uid, routing_key="groupme", sub_key
             "source": source,
             "code": statuscode,
             "type": sub_key,
-            "uid": uid,
+            "wbor_message_id": uid,
         },
         routing_key=routing_key,
         connection_name="GroupMeLogPublisherConnection",
