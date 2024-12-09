@@ -20,6 +20,8 @@ Twilio commands include:
 - Displaying message statistics for a phone number
 
 Finally, all interactions with the GroupMe API are logged in Postgres for auditing purposes.
+Considering this, if this application is down, producers will fallback to their own API
+interaction with GroupMe and queue the logs for said interaction to be sent here when it is back up.
 
 Message handling:
 - Messages are received from RabbitMQ and processed by the appropriate handler based on the 

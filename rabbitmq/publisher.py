@@ -6,7 +6,13 @@ import json
 import pika
 import pika.exceptions
 from utils.logging import configure_logging
-from config import RABBITMQ_HOST, RABBITMQ_USER, RABBITMQ_PASS, RABBITMQ_EXCHANGE
+from config import (
+    RABBITMQ_HOST,
+    RABBITMQ_USER,
+    RABBITMQ_PASS,
+    RABBITMQ_EXCHANGE,
+    GROUPME_BOT_ID,
+)
 from rabbitmq.util import assert_exchange
 
 
@@ -106,6 +112,11 @@ def publish_log_pg(body, source, statuscode, uid, routing_key="groupme", sub_key
     if not isinstance(body, dict):
         logger.error("Invalid body type for publish_log_pg: %s", type(body))
         return
+
+    # Check whether a bot ID is present in the body and not empty
+    # If it is empty, set it to the default bot ID
+    if not body.get("bot_id"):
+        body["bot_id"] = GROUPME_BOT_ID
 
     publish_message(
         request_body={
