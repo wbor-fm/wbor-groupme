@@ -25,3 +25,7 @@ GROUPME_CHARACTER_LIMIT = abs(int(os.getenv("GROUPME_CHARACTER_LIMIT", "900")))
 
 GROUPME_API = "https://api.groupme.com/v3/bots/post"
 GROUPME_IMAGE_API = "https://image.groupme.com/pictures"
+
+
+# Define a blocklist for routing keys
+BLOCKLIST = ["twilio.sms.outgoing"]

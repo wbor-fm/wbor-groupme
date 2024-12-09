@@ -15,6 +15,7 @@ from config import (
     RABBITMQ_USER,
     RABBITMQ_PASS,
     RABBITMQ_EXCHANGE,
+    BLOCKLIST,
 )
 from .util import assert_exchange
 from .handlers import MESSAGE_HANDLERS, SOURCES
@@ -46,6 +47,18 @@ def callback(ch, method, properties, body):
         logger.debug(
             "Received message (w/ routing key `%s`): %s", method.routing_key, message
         )
+
+        # Ensure it is not in the routing key blocklist
+        # Strip "source." from the routing key
+        copy = method.routing_key
+        stripped_key = copy.replace("source.", "")
+        if stripped_key in BLOCKLIST:
+            logger.warning(
+                "Routing key `%s` is in the blocklist. Message rejected.",
+                method.routing_key,
+            )
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            return
 
         # Verify required fields
 
@@ -129,14 +142,14 @@ def callback(ch, method, properties, body):
                 message.get("wbor_message_id"),
             )
         else:
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             logger.warning(
                 "Message processing failed. Message requeued: %s",
                 message.get("wbor_message_id"),
             )
     except (json.JSONDecodeError, KeyError) as e:
         logger.error("Failed to execute callback: %s", e)
-        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 
 def consume_messages():

@@ -28,12 +28,16 @@ Message handling:
     - The message body is sanitized to remove unprintable characters.
     - The message is processed by the appropriate handler.
 
-Source keys:
-- `source.twilio.sms.incoming`: TwilioHandler()
-- `source.standard.*`: StandardHandler()
-- `source.endec.*`: 
-- `source.apcupsd.*`: 
-- `source.azuracast.*`:
+Incoming keys:
+- `source.twilio.#`: TwilioHandler()
+- `source.standard.#`: StandardHandler() - could generate locally from /send
+    - `sms.incoming`: Incoming SMS messages
+
+Emits keys:
+- `source.groupme.msg`: Bot message logs (includes images attached to messages)
+- `source.groupme.img`: Image service API logs
+- `source.groupme.callback`: Chat callback logs
+- `source.#`: Using POST /send, the source is potentially wildcard
 
 TODO:
 - Callback actions

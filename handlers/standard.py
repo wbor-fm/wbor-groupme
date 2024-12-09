@@ -12,7 +12,7 @@ logger = configure_logging(__name__)
 
 class StandardHandler(MessageSourceHandler):
     """
-    Bound to key `source.standard`.
+    Bound to key `source.standard.#`.
 
     The request body is expected to include the following fields:
     - body (str): The message text

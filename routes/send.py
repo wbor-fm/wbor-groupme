@@ -84,5 +84,5 @@ def send_message():
     # At this point, we know the request body is valid
     # The only remaining fields are `body`, `source`, `images`, and `wbor_message_id`
     logger.info("Publishing to RabbitMQ: %s: %s", sender_uid, body)
-    publish_message(body, body.get("source"))
+    publish_message(body, body.get("source"))  # Wildcard routing key
     return "OK"

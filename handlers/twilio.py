@@ -39,15 +39,6 @@ class TwilioHandler(MessageSourceHandler):
         logger.debug("Subkey: %s", subkey)
         logger.debug("Type: %s", body.get("type"))
 
-        # TODO: implement `sms.outgoing` handling (if we need copies sent)
-        if subkey != "sms.incoming":
-            logger.debug(
-                "Skipping message (due to subkey `%s`): %s",
-                subkey,
-                body.get("wbor_message_id"),
-            )
-            return True
-
         self.send_message_to_groupme(
             body, body.get("wbor_message_id"), self.extract_images, source=TWILIO_SOURCE
         )
