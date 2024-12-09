@@ -17,7 +17,7 @@ from config import (
     RABBITMQ_EXCHANGE,
     BLOCKLIST,
 )
-from .util import assert_exchange
+from .util import assert_exchange, send_acknowledgment
 from .handlers import MESSAGE_HANDLERS, SOURCES
 
 logger = configure_logging(__name__)
@@ -134,12 +134,18 @@ def callback(ch, method, properties, body):
         handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
 
         # `source.twilio.sms.incoming` -> `sms.incoming`
-        subkey = method.routing_key.split(".")[2:]
-        reconstructed_subkey = ".".join(subkey)
+        subkey = ".".join(method.routing_key.split(".")[2:])
 
         # Validate success of handler.process_message
-        result = handler.process_message(message, reconstructed_subkey, alreadysent)
+        result = handler.process_message(message, subkey, alreadysent)
         if result:
+            # Send acknowledgment back to producer in cases where it is needed
+            # e.g. for wbor-groupme-producer
+            reply_to = properties.reply_to
+            correlation_id = properties.correlation_id
+            if reply_to and correlation_id:
+                send_acknowledgment(message, reply_to, correlation_id)
+
             ch.basic_ack(delivery_tag=method.delivery_tag)
             logger.info(
                 "Message processed, logged, and acknowledged: %s",
