@@ -233,7 +233,7 @@ class GroupMe:
             if response.status_code in {200, 202}:
                 if body.get("text"):
                     logger.info(
-                        "Message sent successfully to %s:\n\n%s\n",
+                        "GroupMe message sent to %s:\n\n%s\n",
                         GROUPCHAT_NAME,
                         body.get("text"),
                     )

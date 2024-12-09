@@ -65,9 +65,17 @@ def publish_message(
             body=json.dumps(request_body).encode(),
             properties=properties,
         )
-        logger.info(
-            "Message published with routing key `%s`: %s", routing_key, request_body
-        )
+
+        if request_body.get("type") == "log":
+            logger.debug(
+                "Log message published with routing key `%s`: %s",
+                routing_key,
+                request_body,
+            )
+        else:
+            logger.info(
+                "Message published with routing key `%s`: %s", routing_key, request_body
+            )
         connection.close()
     except pika.exceptions.AMQPConnectionError as e:
         logger.error(

@@ -57,7 +57,12 @@ def callback(ch, method, properties, body):
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
         original_body = message.get("Body") or message.get("body")
-        logger.info("Processing message from `%s`: %s", sender, original_body)
+        logger.info(
+            "Processing message from `%s`: %s - UID: %s",
+            sender,
+            original_body,
+            message.get("wbor_message_id"),
+        )
 
         # Verify the message type and source
         # Must be either an incoming SMS or a standard message
@@ -84,7 +89,7 @@ def callback(ch, method, properties, body):
                 original_body = message.get("Body") or message.get("body")
                 sanitized_body = MessageUtils.sanitize_string(original_body)
                 if original_body != sanitized_body:
-                    logger.info(
+                    logger.debug(
                         "Sanitized unprintable characters in message body: %s -> %s",
                         original_body,
                         sanitized_body,
@@ -113,7 +118,8 @@ def callback(ch, method, properties, body):
         if result:
             ch.basic_ack(delivery_tag=method.delivery_tag)
             logger.info(
-                "Message processed and acknowledged: %s", message.get("wbor_message_id")
+                "Message processed, logged, and acknowledged: %s",
+                message.get("wbor_message_id"),
             )
         else:
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
