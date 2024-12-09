@@ -37,7 +37,7 @@ class StandardHandler(MessageSourceHandler):
         # If the message was already sent, skip sending and just log the API interaction
         # TODO: there's a chance the downstream producer had image API interactions as well
         if alreadysent:
-            logger.info("Message already sent: %s", body.get("wbor_message_id"))
+            logger.info("Message already sent - will now log ONLY: %s", body.get("wbor_message_id"))
             publish_log_pg(
                 body,
                 source=body.get("source"),

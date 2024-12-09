@@ -27,7 +27,10 @@ def callback(ch, method, properties, body):
     """
     Callback function to process messages from the RabbitMQ queue.
 
-    Treatment for all messages:
+    If a message has the header `alreadysent`, it is assumed to have been sent
+    and at this point is only logged. Otherwise, the message is sanitized and processed.
+
+    Treatment for all messages not already sent:
     - Sanitize the message body (for unsent messages)
     - Process the message using the appropriate handler
 
@@ -102,7 +105,8 @@ def callback(ch, method, properties, body):
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
 
-        # Sanitize the message body
+        # Sanitize the message body only if it hasn't been sent yet
+        # Otherwise, log it as is
         alreadysent = properties.headers.get("alreadysent", False)
         if not alreadysent:
             if "Body" in message or "body" in message:
