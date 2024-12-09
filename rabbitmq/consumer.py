@@ -43,7 +43,9 @@ def callback(ch, method, properties, body):
 
     try:
         message = json.loads(body)
-        logger.debug("Received message: %s", message)
+        logger.debug(
+            "Received message (w/ routing key `%s`): %s", method.routing_key, message
+        )
 
         # Verify required fields
 
@@ -54,6 +56,11 @@ def callback(ch, method, properties, body):
         # the message is rejected and it won't be requeued.
         # Twilio capitalizes `Body`, while other sources use `body`
         if not sender and (not message.get("body") or not message.get("Body")):
+            logger.debug(
+                "Message missing required fields: %s, delivery_tag: %s",
+                message,
+                method.delivery_tag,
+            )
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
         original_body = message.get("Body") or message.get("body")
