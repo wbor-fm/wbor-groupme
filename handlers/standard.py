@@ -34,7 +34,8 @@ class StandardHandler(MessageSourceHandler):
         # TODO: decide on keeping type field embedded in the message body versus using the subkey
 
         # If the message was already sent, skip sending and just log the API interaction
-        # TODO: there's a chance the downstream producer had image API interactions as well
+        # NOTE: this will be insufficient if the downstream producer had image API interactions
+        # in addition to the message API interaction. I don't expect this will occur.
         if alreadysent:
             logger.info(
                 "Message already sent - will now log ONLY: %s",

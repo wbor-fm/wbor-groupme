@@ -17,8 +17,10 @@ send = Blueprint("send", __name__)
 @send.route("/send", methods=["POST"])
 def send_message():
     """
-    Send a message via a bot. Meant for sources that do not use RabbitMQ or is impractical to use.
+    Send a message via the default bot. Meant for sources that cannot emit MQ messages.
     Queue is local to this service (in consumer.py).
+
+    If the source provided is not blocked or unsupported, the message not sent.
 
     Logs the message in Postgres with:
     - Source (e.g. Twilio)

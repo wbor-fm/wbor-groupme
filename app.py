@@ -1,52 +1,5 @@
 """
 GroupMe Handler.
-
-We have a group chat on GroupMe that includes all members of station management.
-This chat is used to monitor messages from various sources, including incoming Twilio SMS messages,
-our UPS backups, our Sage Digital ENDEC, and our online AzuraCast streams.
-
-This application serves as a message handler for the GroupMe chat. Various sources submit messages
-to RabbitMQ, which are then consumed by this application. The messages are then forwarded to the
-GroupMe chat.
-
-Additionally, this application can receive messages directly via an HTTP POST request to /send,
-which is meant for sources that do not use RabbitMQ or is impractical to use.
-
-The application also includes a callback endpoint for the GroupMe API, which is triggered when
-messages are sent to the group chat. This allows for various commands to be parsed and executed.
-Twilio commands include:
-- Banning a phone number from sending messages
-- Unbanning a phone number from sending messages
-- Displaying message statistics for a phone number
-
-Finally, all interactions with the GroupMe API are logged in Postgres for auditing purposes.
-Considering this, if this application is down, producers will fallback to their own API
-interaction with GroupMe and queue the logs for said interaction to be sent here when it is back up.
-
-Message handling:
-- Messages are received from RabbitMQ and processed by the appropriate handler based on the 
-  routing key.
-- For all messages:
-    - The message body is sanitized to remove unprintable characters.
-    - The message is processed by the appropriate handler.
-
-Incoming keys:
-- `source.twilio.#`: TwilioHandler()
-- `source.standard.#`: StandardHandler() - could generate locally from /send
-    - `sms.incoming`: Incoming SMS messages
-
-Emits keys:
-- `source.groupme.msg`: Bot message logs (includes images attached to messages)
-- `source.groupme.img`: Image service API logs
-- `source.groupme.callback`: Chat callback logs
-- `source.#`: Using POST /send, the source is potentially wildcard
-
-TODO:
-- Callback actions
-    - Block sender based on the message's UID
-    - Implement message statistics tracking and retrieval
-    - Implement message banning/unbanning
-    - Remotely clear the dashboard screen?
 """
 
 import sys
