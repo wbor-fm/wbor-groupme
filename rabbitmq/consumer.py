@@ -55,18 +55,8 @@ def validate_message_fields(message, method, ch):
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
         return False
 
-    # if not sender == TWILIO_SOURCE and not message.get("source") == "standard":
-    #     logger.debug("Invalid message source: %s", message.get("source"))
-    #     logger.warning(
-    #         "Matching condition not met (not requeueing): %s, delivery_tag: %s",
-    #         message,
-    #         method.delivery_tag,
-    #     )
-    #     ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-    #     return False
-
     logger.info(
-        "Validated message from `%s`: %s - UID: %s",
+        "Received and validated message from `%s`: %s - UID: %s",
         sender,
         message_body,
         message.get("wbor_message_id"),

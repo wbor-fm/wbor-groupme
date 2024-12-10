@@ -27,9 +27,12 @@ GROUPME_API = "https://api.groupme.com/v3/bots/post"
 GROUPME_IMAGE_API = "https://image.groupme.com/pictures"
 
 
-# Routing keys we don't want to deal with
-BLOCKLIST = [
+# Routing keys we don't want to deal with globally
+GLOBAL_BLOCKLIST = [
     "source.twilio.sms.outgoing",
     "source.twilio.call-events",
     "source.twilio.voice-intelligence",
 ]
+
+# The /send endpoint should not allow messages if the `source` is in this list
+SEND_BLOCKLIST = ["twilio"]

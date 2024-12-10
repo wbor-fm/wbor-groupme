@@ -12,7 +12,7 @@ from config import (
     RABBITMQ_HOST,
     RABBITMQ_PASS,
     RABBITMQ_USER,
-    BLOCKLIST,
+    GLOBAL_BLOCKLIST,
 )
 
 logger = configure_logging(__name__)
@@ -68,7 +68,7 @@ def parse_routing_key(routing_key):
     parts = routing_key.split(".")
     handler_key = parts[1]  # e.g., "twilio" or "standard"
     subkey = ".".join(parts[2:])  # e.g., "sms.incoming"
-    is_blocked = routing_key in BLOCKLIST
+    is_blocked = routing_key in GLOBAL_BLOCKLIST
     return handler_key, subkey, is_blocked
 
 

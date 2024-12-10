@@ -6,7 +6,7 @@ from flask import Blueprint, request
 from utils.message import MessageUtils
 from utils.logging import configure_logging
 from rabbitmq.publisher import publish_message
-from config import APP_PASSWORD
+from config import APP_PASSWORD, SEND_BLOCKLIST
 
 logger = configure_logging(__name__)
 
@@ -59,6 +59,11 @@ def send_message():
     missing_fields = [field for field in required_fields if field not in body]
     if missing_fields:
         logger.error("Bad Request: Missing required fields: %s", missing_fields)
+        return "Bad Request"
+
+    # Ensure the source isn't blocked
+    if body["source"] in SEND_BLOCKLIST:
+        logger.error("Source blocked: %s", body["source"])
         return "Bad Request"
 
     # Ensure any other fields are either `images` or `wbor_message_id`

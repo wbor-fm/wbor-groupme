@@ -32,6 +32,7 @@ class TwilioHandler(MessageSourceHandler):
         Returns:
         - bool: True if the message was successfully processed, False otherwise
         """
+        subkey = subkey or None
         logger.debug(
             "Twilio `process_message` called for: %s",
             message.get("wbor_message_id"),
