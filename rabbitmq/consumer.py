@@ -9,7 +9,6 @@ import pika
 from pika.exceptions import AMQPConnectionError
 from utils.logging import configure_logging
 from config import (
-    TWILIO_SOURCE,
     RABBITMQ_HOST,
     RABBITMQ_USER,
     RABBITMQ_PASS,

@@ -5,6 +5,7 @@ Send message module.
 from flask import Blueprint, request
 from utils.message import MessageUtils
 from utils.logging import configure_logging
+from rabbitmq.handlers import MESSAGE_HANDLERS
 from rabbitmq.publisher import publish_message
 from config import APP_PASSWORD, SEND_BLOCKLIST
 
@@ -66,6 +67,12 @@ def send_message():
         logger.error("Source blocked: %s", body["source"])
         return "Bad Request"
 
+    # If there won't be a handler for the source, it's better to block it
+    # This is to prevent messages from being sent without being processed
+    if body["source"] not in MESSAGE_HANDLERS:
+        logger.error("Source not supported: %s", body["source"])
+        return "Bad Request"
+
     # Ensure any other fields are either `images` or `wbor_message_id`
     allowed_optional_fields = ["images", "wbor_message_id"]
     extra_fields = [
@@ -90,4 +97,5 @@ def send_message():
     # The only remaining fields are `body`, `source`, `images`, and `wbor_message_id`
     logger.info("Publishing to RabbitMQ: %s: %s", sender_uid, body)
     publish_message(body, body.get("source"))  # Wildcard routing key
+    # TODO: let sender know if message was actually sent successfully
     return "OK"
