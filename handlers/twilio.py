@@ -16,7 +16,7 @@ class TwilioHandler(MessageSourceHandler):
     Handles Twilio-specific message processing and forwarding.
     """
 
-    def process_message(self, body, subkey, _alreadysent=False):
+    def process_message(self, message, subkey, _alreadysent):
         """
         Process a text message from Twilio.
 
@@ -34,29 +34,31 @@ class TwilioHandler(MessageSourceHandler):
         """
         logger.debug(
             "Twilio `process_message` called for: %s",
-            body.get("wbor_message_id"),
+            message.get("wbor_message_id"),
         )
         logger.debug("Subkey: %s", subkey)
-        logger.debug("Type: %s", body.get("type"))
+        logger.debug("Type: %s", message.get("type"))
 
         self.send_message_to_groupme(
-            body, body.get("wbor_message_id"), self.extract_images, source=TWILIO_SOURCE
+            message,
+            self.extract_images,
+            source=TWILIO_SOURCE,
         )
 
         # Send ack back to wbor-twilio (the sender)
-        logger.debug("Sending acknowledgment for: %s", body["wbor_message_id"])
+        logger.debug("Sending acknowledgment for: %s", message["wbor_message_id"])
         try:
             ack_response = requests.post(
                 ACK_URL,
-                json={"wbor_message_id": body["wbor_message_id"]},
+                json={"wbor_message_id": message["wbor_message_id"]},
                 timeout=3,
             )
             if ack_response.status_code == 200:
-                logger.debug("Acknowledgment sent for: %s", body["wbor_message_id"])
+                logger.debug("Acknowledgment sent for: %s", message["wbor_message_id"])
                 return True
             logger.error(
                 "Acknowledgment failed for: %s. Status: %s",
-                body["wbor_message_id"],
+                message["wbor_message_id"],
                 ack_response.status_code,
             )
             return False
@@ -64,12 +66,12 @@ class TwilioHandler(MessageSourceHandler):
             # Handle issues with the HTTP request to the acknowledgment URL
             logger.error(
                 "Failed to send acknowledgment for: %s. Exception: %s",
-                body["wbor_message_id"],
+                message["wbor_message_id"],
                 e,
             )
             return False
         except KeyError as e:
-            # Handle issues with the message body
+            # Handle issues with the message
             logger.error("Failed to send acknowledgment: %s", e)
             return False
 

@@ -1,38 +1,110 @@
 """
-Consumer module for RabbitMQ.
+Consumer module for RabbitMQ. Takes messages from the RabbitMQ queues and handles them
+accordingly as defined in the message handlers within the callback function.
 """
 
-import json
 import time
 import sys
 import pika
-import pika.exceptions
+from pika.exceptions import AMQPConnectionError
 from utils.logging import configure_logging
-from utils.message import MessageUtils
 from config import (
     TWILIO_SOURCE,
     RABBITMQ_HOST,
     RABBITMQ_USER,
     RABBITMQ_PASS,
     RABBITMQ_EXCHANGE,
-    BLOCKLIST,
 )
-from .util import assert_exchange, send_acknowledgment
+from .util import (
+    assert_exchange,
+    process_message_body,
+    parse_routing_key,
+    generate_message_id,
+    handle_acknowledgment,
+    sanitize_message,
+)
 from .handlers import MESSAGE_HANDLERS, SOURCES
 
 logger = configure_logging(__name__)
 
 
+def validate_message_fields(message, method, ch):
+    """
+    Ensure that the message has the required fields and meets conditions.
+
+    Required fields:
+    - "From" or "source"
+        - "From" if from Twilio, "source" otherwise
+    - "body" or "Body"
+        - Twilio capitalizes `Body`, while other sources use `body`
+
+    Don't requeue the message if it's missing any.
+
+    Conditions:
+    - The message source must be either Twilio or standard.
+    - The message source must be Twilio if the sender is Twilio.
+    """
+    sender = message.get("From") or message.get("source")
+    message_body = message.get("body") or message.get("Body")
+    if not sender:
+        logger.debug("Missing sender field in message: %s", message)
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        return False
+    if not message_body:
+        logger.debug("Missing message body field in message: %s", message)
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        return False
+
+    if not sender == TWILIO_SOURCE and not message.get("source") == "standard":
+        logger.debug("Invalid message source: %s", message.get("source"))
+        logger.warning(
+            "Matching condition not met (not requeueing): %s, delivery_tag: %s",
+            message,
+            method.delivery_tag,
+        )
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        return False
+
+    logger.info(
+        "Validated message from `%s`: %s - UID: %s",
+        sender,
+        message_body,
+        message.get("wbor_message_id"),
+    )
+    return True
+
+
+def process_message_handler(message, handler_key, subkey, alreadysent):
+    """
+    Processes an incoming message by determining the appropriate handler based on the routing key.
+
+    Parameters:
+    - message (dict): The message payload to be processed.
+    - method (pika.spec.Basic.Deliver): The delivery method containing the routing key.
+    - alreadysent (bool): A flag indicating whether the message has already been sent.
+        - e.g. the message was sent to GroupMe by the producer's API interaction
+
+    Returns:
+    - The result of the handler's process_message().
+    """
+    # Determine and invoke the appropriate handle
+    # NOTE that the routing key[1] is the same as the body source field
+    logger.debug("Handler query provided: `%s`", handler_key)
+
+    handler = MESSAGE_HANDLERS[handler_key]
+    return handler.process_message(message, subkey, alreadysent)
+
+
 def callback(ch, method, properties, body):
     """
-    Callback function to process messages from the RabbitMQ queue.
+    Actually process the messages being consumed from the queue.
+
+    Validates, sanitizes, and routes these messages to appropriate handlers based on their routing
+    keys.
 
     If a message has the header `alreadysent`, it is assumed to have been sent
-    and at this point is only logged. Otherwise, the message is sanitized and processed.
-
-    Treatment for all messages not already sent:
-    - Sanitize the message body (for unsent messages)
-    - Process the message using the appropriate handler
+    and at this point is only logged, so we don't sanitize it since we assume the producer has done
+    so in order to send it from their end.
 
     Parameters:
     - body: The message body
@@ -44,124 +116,49 @@ def callback(ch, method, properties, body):
     - json.JSONDecodeError: If the message body is not valid JSON
     - KeyError: If the message body is missing required keys
     """
-
     try:
-        message = json.loads(body)
+        message = process_message_body(body)
         logger.debug(
-            "Received message (w/ routing key `%s`): %s", method.routing_key, message
+            "Received message (w/ routing key `%s`), JSON: %s",
+            method.routing_key,
+            message,
         )
 
-        # Ensure it is not in the routing key blocklist
-        # Strip "source." from the routing key
-        copy = method.routing_key
-        stripped_key = copy.replace("source.", "")
-        if stripped_key in BLOCKLIST:
+        handler_key, subkey, is_blocked = parse_routing_key(method.routing_key)
+        if is_blocked:
             logger.warning(
-                "Routing key `%s` is in the blocklist. Message rejected.",
+                "Routing key `%s` is in the blocklist. Message rejected (not requeueing).",
                 method.routing_key,
             )
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
 
-        # Verify required fields
-
-        # "From" if from Twilio, "source" otherwise
-        sender = message.get("From") or message.get("source")
-
-        # If both the sender and the message body (body or Body) are missing,
-        # the message is rejected and it won't be requeued.
-        # Twilio capitalizes `Body`, while other sources use `body`
-        if not sender and (not message.get("body") or not message.get("Body")):
-            logger.debug(
-                "Message missing required fields: %s, delivery_tag: %s",
-                message,
-                method.delivery_tag,
-            )
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            return
-        original_body = message.get("Body") or message.get("body")
-        logger.info(
-            "Processing message from `%s`: %s - UID: %s",
-            sender,
-            original_body,
-            message.get("wbor_message_id"),
-        )
-
-        # Verify the message type and source
-        # Must be either an incoming SMS or a standard message
-
-        # Add other sources as needed in the future (e.g. AzuraCast)
-        if (
-            not message.get("source")
-            == TWILIO_SOURCE  # Added in the wbor-twilio /sms endpoint
-            and not message.get("source") == "standard"
-        ):
-            logger.debug("message.source: %s", message.get("source"))
-            logger.warning(
-                "Matching condition not met: %s, delivery_tag: %s",
-                message,
-                method.delivery_tag,
-            )
+        # Ensure the message has the required fields
+        if not validate_message_fields(message, method, ch):
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
 
-        # Sanitize the message body only if it hasn't been sent yet
-        # Otherwise, log it as is
         alreadysent = properties.headers.get("alreadysent", False)
-        if not alreadysent:
-            if "Body" in message or "body" in message:
-                original_body = message.get("Body") or message.get("body")
-                sanitized_body = MessageUtils.sanitize_string(original_body)
-                if original_body != sanitized_body:
-                    logger.debug(
-                        "Sanitized unprintable characters in message body: %s -> %s",
-                        original_body,
-                        sanitized_body,
-                    )
-                if message.get("Body"):
-                    message["Body"] = sanitized_body
-                else:
-                    message["body"] = sanitized_body
+        sanitize_message(message, alreadysent)
+        generate_message_id(message)  # Append a message ID if it doesn't exist already
 
-        # Generate a UUID if one is not provided
-        if not message.get("wbor_message_id"):
-            message["wbor_message_id"] = MessageUtils.gen_uuid()
-
-        # Determine and invoke the appropriate handle
-        # NOTE that the routing key[1] is the same as the body source field
-        logger.debug("Handler query provided: `%s`", method.routing_key.split(".")[1])
-        # `source.twilio.#` -> `twilio` or `source.standard.#` -> `standard`
-        handler = MESSAGE_HANDLERS[method.routing_key.split(".")[1]]
-
-        # `source.twilio.sms.incoming` -> `sms.incoming`
-        subkey = ".".join(method.routing_key.split(".")[2:])
-
-        # Validate success of handler.process_message
-        result = handler.process_message(message, subkey, alreadysent)
-        if result:
-            # Send acknowledgment back to producer in cases where it is needed
-            # e.g. for wbor-groupme-producer
-            reply_to = properties.reply_to
-            correlation_id = properties.correlation_id
-            if reply_to and correlation_id:
-                logger.debug(
-                    "Sending acknowledgment for: %s", message.get("wbor_message_id")
-                )
-                send_acknowledgment(message, reply_to, correlation_id)
-
+        # Routes the message to the correct handler based on its routing key
+        if process_message_handler(message, handler_key, subkey, alreadysent):
+            # Send a message acknowledgment, if applicable
+            handle_acknowledgment(message, properties)
             ch.basic_ack(delivery_tag=method.delivery_tag)
             logger.info(
                 "Message processed, logged, and acknowledged: %s",
                 message.get("wbor_message_id"),
             )
         else:
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             logger.warning(
-                "Message processing failed. Message requeued: %s",
+                "Message processing failed (not requeueing): %s",
                 message.get("wbor_message_id"),
             )
-    except (json.JSONDecodeError, KeyError) as e:
-        logger.error("Failed to execute callback: %s", e)
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+    except KeyError as e:
+        logger.error("KeyError during message processing (not requeueing): %s", e)
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 
@@ -212,12 +209,8 @@ def consume_messages():
 
             logger.info("Connected to RabbitMQ & queues bound. Now consuming...")
             channel.start_consuming()
-        except pika.exceptions.AMQPConnectionError as conn_error:
+        except AMQPConnectionError as conn_error:
             error_message = str(conn_error)
-            logger.error(
-                "(Retrying in 5 seconds) Failed to connect to RabbitMQ: %s",
-                error_message,
-            )
             if "CONNECTION_FORCED" in error_message and "shutdown" in error_message:
                 logger.critical(
                     "Broker shut down the connection. Shutting down consumer."
@@ -225,7 +218,11 @@ def consume_messages():
                 sys.exit(1)  # Exit the process to avoid infinite retries
             if "ACCESS_REFUSED" in error_message:
                 logger.critical(
-                    "Access refused. Check RabbitMQ user permissions. Shutting down consumer."
+                    "RabbitMQ access refused. Check user permissions. Shutting down consumer."
                 )
                 sys.exit(1)
+            logger.error(
+                "(Retrying in 5 seconds) Failed to connect to RabbitMQ: %s",
+                error_message,
+            )
             time.sleep(5)

@@ -27,5 +27,9 @@ GROUPME_API = "https://api.groupme.com/v3/bots/post"
 GROUPME_IMAGE_API = "https://image.groupme.com/pictures"
 
 
-# Define a blocklist for routing keys
-BLOCKLIST = ["twilio.sms.outgoing", "twilio.call-events", "twilio.voice-intelligence"]
+# Routing keys we don't want to deal with
+BLOCKLIST = [
+    "source.twilio.sms.outgoing",
+    "source.twilio.call-events",
+    "source.twilio.voice-intelligence",
+]

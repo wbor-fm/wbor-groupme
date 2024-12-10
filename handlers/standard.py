@@ -23,35 +23,36 @@ class StandardHandler(MessageSourceHandler):
     - bool: True if the message was successfully processed, False otherwise
     """
 
-    def process_message(self, body, subkey, alreadysent=False):
+    def process_message(self, message, subkey, alreadysent=False):
         subkey = subkey or None
-
         logger.debug(
             "Standard `process_message` called for: %s",
-            body.get("wbor_message_id"),
+            message.get("wbor_message_id"),
         )
         logger.debug("Subkey: %s", subkey)
-        logger.debug("Type: %s", body.get("type"))
+        logger.debug("Type: %s", message.get("type"))
         # TODO: decide on keeping type field embedded in the message body versus using the subkey
 
         # If the message was already sent, skip sending and just log the API interaction
         # TODO: there's a chance the downstream producer had image API interactions as well
         if alreadysent:
-            logger.info("Message already sent - will now log ONLY: %s", body.get("wbor_message_id"))
+            logger.info(
+                "Message already sent - will now log ONLY: %s",
+                message.get("wbor_message_id"),
+            )
             publish_log_pg(
-                body,
-                source=body.get("source"),
-                statuscode=body.get("statuscode"),
-                uid=body.get("wbor_message_id"),
+                message,
+                source=message.get("source"),
+                statuscode=message.get("statuscode"),
+                uid=message.get("wbor_message_id"),
                 routing_key="groupme.msg",
             )
             return True
 
         self.send_message_to_groupme(
-            body,
-            body.get("wbor_message_id"),
+            message,
             self.extract_images,
-            source=body.get("source"),
+            source=message.get("source"),
         )
         return True  # Ack (to other container) not needed, unlike Twilio
 

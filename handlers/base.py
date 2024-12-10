@@ -13,14 +13,14 @@ class MessageSourceHandler:
     Base class for message source handlers.
     """
 
-    def process_message(self, body, subkey, alreadysent=False):
+    def process_message(self, message, subkey, alreadysent):
         """
         Logic to process a message from the source.
         """
         raise NotImplementedError("This method should be implemented by subclasses.")
 
     @staticmethod
-    def send_message_to_groupme(message, uid, extract_images, source):
+    def send_message_to_groupme(message, extract_images, source):
         """
         Generalized method to send messages and images to GroupMe.
 
@@ -36,6 +36,7 @@ class MessageSourceHandler:
         # Normalize field names due to differences between sources
         # Twilio capitalizes `Body`, while other sources use `body`
         body = message.get("body") or message.get("Body")
+        uid = message.get("wbor_message_id")
         if not body:
             logger.warning("Message body is missing for UID: %s", uid)
             return
