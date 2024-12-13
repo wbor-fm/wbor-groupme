@@ -42,11 +42,15 @@ class MessageSourceHandler:
             logger.warning("Message body or media URL is missing for UID: %s", uid)
             return
 
-        logger.debug("Preparing to send message: %s: %s", uid, body)
+        if body:
+            logger.debug("Preparing to send message: %s: %s", uid, body)
+        else:
+            logger.debug("Media URL received for: %s - %s", uid, media_url)
 
         # Split and send text segments
-        segments = GroupMe.split_message(body)
-        GroupMe.send_text_segments(segments, source, uid)
+        if body:
+            segments = GroupMe.split_message(body)
+            GroupMe.send_text_segments(segments, source, uid)
 
         # Extract images using the handler's method
         groupme_images, unsupported_type = extract_images(message, source, uid)
