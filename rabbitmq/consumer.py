@@ -43,6 +43,16 @@ def validate_message_fields(message, method, ch):
     - The message source must be either Twilio or standard.
     - The message source must be Twilio if the sender is Twilio.
     """
+
+    twilio_sender = message.get("From")
+    if twilio_sender:
+        # If there is an empty message body, there must be a media URL
+        # Otherwise there is nothing to send to GroupMe!
+        if not message.get("Body") and not message.get("MediaUrl0"):
+            logger.debug("Empty message body without media URL: %s", message)
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            return False
+
     sender = message.get("From") or message.get("source")
     message_body = message.get("body") or message.get("Body")
     if not sender:
