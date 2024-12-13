@@ -37,8 +37,9 @@ class MessageSourceHandler:
         # Twilio capitalizes `Body`, while other sources use `body`
         body = message.get("body") or message.get("Body")
         uid = message.get("wbor_message_id")
-        if not body:
-            logger.warning("Message body is missing for UID: %s", uid)
+        media_url = message.get("MediaUrl0")
+        if not body and not media_url:
+            logger.warning("Message body or media URL is missing for UID: %s", uid)
             return
 
         logger.debug("Preparing to send message: %s: %s", uid, body)
