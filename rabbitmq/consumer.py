@@ -37,6 +37,8 @@ def validate_message_fields(message, method, ch):
     - "body" or "Body"
         - Twilio capitalizes `Body`, while other sources use `body`
 
+    If a Twilio message is received, it must have a non-empty message body or media URL.
+
     Don't requeue the message if it's missing any.
 
     Conditions:
@@ -44,26 +46,30 @@ def validate_message_fields(message, method, ch):
     - The message source must be Twilio if the sender is Twilio.
     """
 
-    twilio_sender = message.get("From")
-    if twilio_sender:
-        # If there is an empty message body, there must be a media URL
-        # Otherwise there is nothing to send to GroupMe!
-        if not message.get("Body") and not message.get("MediaUrl0"):
-            logger.debug("Empty message body without media URL: %s", message)
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            return False
+    def nack_message(reason):
+        logger.debug(reason, message)
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        return False
 
+    # Check sender (Twilio or standard source)
     sender = message.get("From") or message.get("source")
-    message_body = message.get("body") or message.get("Body")
     if not sender:
-        logger.debug("Missing sender field in message: %s", message)
-        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-        return False
-    if not message_body:
-        logger.debug("Missing message body field in message: %s", message)
-        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-        return False
+        return nack_message("Missing sender field in message: %s")
 
+    # Check Twilio-specific constraints
+    if message.get("From"):
+        body = message.get("Body")
+        media_url = message.get("MediaUrl0")
+        if not body and not media_url:
+            return nack_message("Empty Twilio message body without media URL: %s")
+
+    # Check for the message body or media URL
+    message_body = message.get("body") or message.get("Body")
+    media_url = message.get("MediaUrl0")
+    if not message_body and not media_url:
+        return nack_message("Message must have a body or a media URL: %s")
+
+    # Log validation success
     logger.info(
         "Received and validated message from `%s`: %s - UID: %s",
         sender,

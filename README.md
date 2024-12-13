@@ -34,6 +34,7 @@ Finally, all interactions with the GroupMe API are logged in Postgres (externall
 
 ## TODO
 
+- Rate limiting
 - Callback actions
   - Block sender based on the message's UID
   - Implement message statistics tracking and retrieval
