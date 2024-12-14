@@ -202,6 +202,18 @@ class GroupMe:
             GroupMe.send_to_groupme(image_data, source, uid)
             time.sleep(0.1)
 
+        GroupMe.send_to_groupme(
+            {
+                "text": (
+                    "---------\n%s images sent!\n%s\n---------",
+                    len(images),
+                    uid,
+                )
+            },
+            source,
+            uid=uid,
+        )
+
     @staticmethod
     def send_to_groupme(
         body, source, uid=MessageUtils.gen_uuid(), bot_id=GROUPME_BOT_ID
