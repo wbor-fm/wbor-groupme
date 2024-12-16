@@ -131,7 +131,7 @@ class GroupMe:
         - list: A list of message segment strings
         """
         segments = [
-            body[i : i + GROUPME_CHARACTER_LIMIT]
+            body[i : i + GROUPME_CHARACTER_LIMIT].strip()
             for i in range(0, len(body), GROUPME_CHARACTER_LIMIT)
         ]
         return segments
@@ -164,7 +164,7 @@ class GroupMe:
                 else ""
             )
             data = {
-                "text": f'{segment_label}"{segment}"{end_marker}',
+                "text": f'{segment_label}"{segment.strip()}"{end_marker}',
             }
             GroupMe.send_to_groupme(data, source, uid=uid)
             logger.debug(
