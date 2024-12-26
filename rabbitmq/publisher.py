@@ -39,7 +39,7 @@ def publish_message(
     - None
     """
 
-    # Append "source." to the routing key
+    # Append "source." to all routing keys
     routing_key = f"source.{routing_key}"
 
     try:
