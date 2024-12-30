@@ -72,7 +72,7 @@ class CommandParser:
                 {"text": f"Pong! UID: {uid_arg}"}, source="command_parser"
             )
         elif command == "!ban":
-            if ban(uid_arg):
+            if ban(uid_arg, True):
                 GroupMe.send_to_groupme(
                     {
                         "text": f"Phone # associated with message UID {uid_arg} has been "
@@ -92,7 +92,7 @@ class CommandParser:
                     source="command_parser",
                 )
         elif command == "!unban":
-            if unban(uid_arg):
+            if ban(uid_arg, False):
                 GroupMe.send_to_groupme(
                     {
                         "text": f"Phone # associated with message UID {uid_arg} has "

@@ -129,8 +129,8 @@ def callback(ch, method, properties, body):
             message,
         )
 
-        handler_key, subkey, is_blocked = parse_routing_key(method.routing_key)
-        if is_blocked:
+        handler_key, subkey, key_blocked = parse_routing_key(method.routing_key)
+        if key_blocked:
             logger.warning(
                 "Routing key `%s` is in the blocklist. Message rejected (not requeueing).",
                 method.routing_key,

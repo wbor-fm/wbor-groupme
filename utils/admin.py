@@ -7,41 +7,25 @@ from utils.logging import configure_logging
 logger = configure_logging(__name__)
 
 
-def ban(uid):
+def ban(uid, ban):
     """
-    Ban a phone number from sending messages to the station.
+    Ban or unban a phone number from sending messages to the station.
 
     Parameters:
-    - uid (str): The message UID of the person to ban
+    - uid (str): The message UID of the person to ban/unban
+    - ban (bool): True to ban the phone number, False to unban
 
     Returns:
-    - bool: True if the phone number was successfully banned, False otherwise
+    - bool: True if the phone number was successfully banned/unbanned, False otherwise
     """
     # 1. Get the phone number associated with the UID by searching the received messages logs
     # - Fetch record & extract phone number
+    # - If there are more than one match for the provided UID, choose the most recent one
     # 2. Add the phone number to the ban list table
     # - Insert record
     # 3. Eventually, clear all messages from the sender in the current message queue
     # (that is shown on the dashboard)
     logger.info("Banning phone number associated with UID: %s", uid)
-    return False
-
-
-def unban(uid):
-    """
-    Unban a phone number from sending messages to the station.
-
-    Parameters:
-    - uid (str): The message UID of the person to ban
-
-    Returns:
-    - bool: True if the phone number was successfully banned, False otherwise
-    """
-    # 1. Get the phone number associated with the UID by searching the received messages logs
-    # - Fetch record & extract phone number
-    # 2. Remove the phone number from the ban list table
-    # - Delete record
-    logger.info("Unbanning phone number associated with UID: %s", uid)
     return False
 
 

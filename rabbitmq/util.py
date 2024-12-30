@@ -62,14 +62,14 @@ def parse_routing_key(routing_key):
     Returns:
     - handler_key (str): The key for determining the handler (e.g., "twilio").
     - subkey (str): The subkey used for further message processing.
-    - is_blocked (bool): Whether the routing key is in the blocklist.
+    - key_blocked (bool): Whether the routing key is in the blocklist.
     """
     # Example incoming routing key: "source.twilio.sms.incoming"
     parts = routing_key.split(".")
     handler_key = parts[1]  # e.g., "twilio" or "standard"
     subkey = ".".join(parts[2:])  # e.g., "sms.incoming"
-    is_blocked = routing_key in GLOBAL_BLOCKLIST
-    return handler_key, subkey, is_blocked
+    key_blocked = routing_key in GLOBAL_BLOCKLIST
+    return handler_key, subkey, key_blocked
 
 
 def generate_message_id(message):
