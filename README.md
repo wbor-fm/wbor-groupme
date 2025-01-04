@@ -34,9 +34,10 @@ Finally, all interactions with the GroupMe API are logged in Postgres (externall
 
 ## TODO
 
-- Rate limiting
-- Callback actions
+- Rate limiting outbound message sending as to not upset GroupMe's API
+- Callback action implementation
   - Block sender based on the message's UID
   - Implement message statistics tracking and retrieval
   - Implement message banning/unbanning
-  - Remotely clear the [dashboard](https://github.com/WBOR-91-1-FM/wbor-studio-dashboard) screen
+  - Remotely clear the [dashboard](https://github.com/WBOR-91-1-FM/wbor-studio-dashboard) screen?
+    - Publish a message to the MQ exchange

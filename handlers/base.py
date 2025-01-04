@@ -28,6 +28,7 @@ class MessageSourceHandler:
         - message (dict): The message data.
         - uid (str): The unique message ID.
         - extract_images (callable): The handler-specific function to extract images.
+            (Twilio-provided media have a schema that differs from our standard schema.)
         - source (str): The source of the message.
 
         Returns:

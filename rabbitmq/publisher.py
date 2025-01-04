@@ -73,7 +73,7 @@ def publish_message(
         )
 
         if request_body.get("type") == "log":
-            logger.debug(
+            logger.info(
                 "Log message published with routing key `%s`: %s",
                 routing_key,
                 request_body,
