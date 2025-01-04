@@ -209,10 +209,10 @@ class GroupMe:
 
         GroupMe.send_to_groupme(
             {
-                "text": f"---------\n{len(images)} {'image' if len(images) == 1 else 'images'} sent!\n{uid}\n---------"
+                "text": f"---------\n{len(images)} {'image' if len(images) == 1 else 'images'} sent!\n{GroupMe.abbreviate_uid(uid)}\n---------"
             },
             source,
-            uid=GroupMe.abbreviate_uid(uid),
+            uid=uid,
         )
 
     @staticmethod
