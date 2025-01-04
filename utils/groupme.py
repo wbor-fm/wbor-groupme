@@ -25,6 +25,13 @@ class GroupMe:
     """
 
     @staticmethod
+    def abbreviate_uid(uid):
+        """
+        Get the first part of the UID
+        """
+        return uid.split("-", 1)[0]
+
+    @staticmethod
     def upload_image(
         image_url, source, uid, access_token=GROUPME_ACCESS_TOKEN, bot_id=GROUPME_BOT_ID
     ):
@@ -151,15 +158,13 @@ class GroupMe:
         Returns:
         - None
         """
-        before_dash_split = uid.split("-", 1)[0]  # Get the first part of the UID
-
         total_segments = len(segments)
         for index, segment in enumerate(segments, start=1):
             segment_label = (
                 f"({index}/{total_segments}):\n" if total_segments > 1 else ""
             )
             end_marker = (
-                f"\n---UID---\n{before_dash_split}\n---------"
+                f"\n---UID---\n{GroupMe.abbreviate_uid(uid)}\n---------"
                 if index == total_segments
                 else ""
             )
@@ -204,12 +209,10 @@ class GroupMe:
 
         GroupMe.send_to_groupme(
             {
-                "text": "---------\n{} images sent!\n{}\n---------".format(
-                    len(images), uid
-                )
+                "text": f"---------\n{len(images)} {'image' if len(images) == 1 else 'images'} sent!\n{uid}\n---------"
             },
             source,
-            uid=uid,
+            uid=GroupMe.abbreviate_uid(uid),
         )
 
     @staticmethod
