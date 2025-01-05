@@ -3,7 +3,7 @@ A class to parse and execute GroupMe admin commands.
 """
 
 from utils.groupme import GroupMe
-from utils.admin import ban, unban, get_stats
+from utils.admin import ban, get_stats
 
 
 class CommandParser:
@@ -84,8 +84,7 @@ class CommandParser:
                 GroupMe.send_to_groupme(
                     {
                         "text": (
-                            "Ban functionality is not yet implemented. "
-                            "This will block a phone # from sending messages to the station. "
+                            "Problem banning phone #. See logs for more information. "
                             f"UID: {uid_arg}"
                         )
                     },
@@ -95,7 +94,7 @@ class CommandParser:
             if ban(uid_arg, False):
                 GroupMe.send_to_groupme(
                     {
-                        "text": f"Phone # associated with message UID {uid_arg} has "
+                        "text": f"Phone # associated with message UID {uid_arg} has been "
                         "been UNBANNED from sending messages."
                     },
                     source="command_parser",
@@ -104,8 +103,7 @@ class CommandParser:
                 GroupMe.send_to_groupme(
                     {
                         "text": (
-                            "Unban functionality is not yet implemented. "
-                            "This will unblock a phone # from sending messages to the station. "
+                            "Problem unbanning phone #. See logs for more information. "
                             f"UID: {uid_arg}"
                         )
                     },
@@ -120,8 +118,7 @@ class CommandParser:
                 GroupMe.send_to_groupme(
                     {
                         "text": (
-                            "Stats functionality is not yet implemented. "
-                            "This will include information such as the # of messages sent by a #. "
+                            "Problem fetching message statistics. See logs for more information. "
                             f"UID: {uid_arg}"
                         )
                     },
