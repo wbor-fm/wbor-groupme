@@ -22,7 +22,7 @@ class MessageSourceHandler:
     @staticmethod
     def send_message_to_groupme(message, extract_images, source):
         """
-        Generalized method to send messages and images to GroupMe.
+        Generalized method to send text messages and then images to GroupMe.
 
         Parameters:
         - message (dict): The message data.
@@ -48,13 +48,13 @@ class MessageSourceHandler:
         else:
             logger.debug("Media URL received for: %s - %s", uid, media_url)
 
+        # Extract images using the handler's method
+        groupme_images, unsupported_type = extract_images(message, source, uid)
+
         # Split and send text segments
         if body:
             segments = GroupMe.split_message(body)
-            GroupMe.send_text_segments(segments, source, uid)
-
-        # Extract images using the handler's method
-        groupme_images, unsupported_type = extract_images(message, source, uid)
+            GroupMe.send_text_segments(segments, source, uid, len(groupme_images))
 
         if groupme_images:
             GroupMe.send_images(groupme_images, source, uid)
@@ -66,7 +66,7 @@ class MessageSourceHandler:
                     "text": (
                         "A media item was sent with an unsupported format.\n\n"
                         "Check the message in Twilio logs for details.\n"
-                        "---------\n"
+                        "---UID---\n"
                         "%s\n"
                         "---------",
                         uid,
