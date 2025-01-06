@@ -72,6 +72,10 @@ def publish_message(
             properties=properties,
         )
 
+        # Strip `raw_img` from request body for logging
+        if request_body.get("raw_img"):
+            request_body.pop("raw_img")
+
         if request_body.get("type") == "log":
             logger.info(
                 "Log message published with routing key `%s`: %s",
