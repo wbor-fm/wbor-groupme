@@ -257,7 +257,7 @@ class GroupMe:
                         GROUPCHAT_NAME,
                         body.get("text"),
                     )
-                elif body.get("picture_url"):
+                if body.get("picture_url"):
                     logger.info("Image sent successfully: %s", body.get("picture_url"))
             else:
                 logger.error(

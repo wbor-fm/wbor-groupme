@@ -44,7 +44,7 @@ class MessageSourceHandler:
             return
 
         if body:
-            logger.debug("Preparing to send message: %s: %s", uid, body)
+            logger.debug("Preparing to send message %s", uid)
         else:
             logger.debug("Media URL received for: %s - %s", uid, media_url)
 
