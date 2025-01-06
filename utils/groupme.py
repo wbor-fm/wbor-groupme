@@ -222,7 +222,7 @@ class GroupMe:
             # So, we send a message with the UID to indicate that no body was sent and the number of images to expect
             GroupMe.send_to_groupme(
                 {
-                    "text": f"---------\nNo body test; {len(images)} {'image' if len(images) == 1 else 'images'} sent!\n{GroupMe.abbreviate_uid(uid)}\n---------"
+                    "text": f"---------\nNo body text; {len(images)} {'image' if len(images) == 1 else 'images'} sent!\n{GroupMe.abbreviate_uid(uid)}\n---------"
                 },
                 source,
                 uid=uid,
