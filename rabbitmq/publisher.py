@@ -72,20 +72,38 @@ def publish_message(
             properties=properties,
         )
 
+        stripped = False
         # Strip `raw_img` from request body for logging
         if request_body.get("raw_img"):
             request_body.pop("raw_img")
+            stripped = True
 
-        if request_body.get("type") == "log":
-            logger.info(
-                "Log message published with routing key `%s`: %s",
-                routing_key,
-                request_body,
-            )
+        if not stripped:
+            if request_body.get("type") == "log":
+                logger.info(
+                    "Log message published with routing key `%s`: %s",
+                    routing_key,
+                    request_body,
+                )
+            else:
+                logger.info(
+                    "Message published with routing key `%s`: %s",
+                    routing_key,
+                    request_body,
+                )
         else:
-            logger.info(
-                "Message published with routing key `%s`: %s", routing_key, request_body
-            )
+            if request_body.get("type") == "log":
+                logger.info(
+                    "Log message published with routing key `%s`: %s (stripped `raw_img`)",
+                    routing_key,
+                    request_body,
+                )
+            else:
+                logger.info(
+                    "Message published with routing key `%s`: %s (stripped `raw_img`)",
+                    routing_key,
+                    request_body,
+                )
         connection.close()
     except pika.exceptions.AMQPConnectionError as e:
         logger.error(

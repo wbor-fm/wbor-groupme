@@ -70,12 +70,19 @@ def validate_message_fields(message, method, ch):
         return nack_message("Message must have a body or a media URL: %s")
 
     # Log validation success
-    logger.info(
-        "Received and validated message from `%s`: %s - UID: %s",
-        sender,
-        message_body,
-        message.get("wbor_message_id"),
-    )
+    if message_body:
+        logger.info(
+            "Received and validated message from `%s`: %s - UID: %s",
+            sender,
+            message_body,
+            message.get("wbor_message_id"),
+        )
+    else:
+        logger.info(
+            "Received and validated media message from `%s`: %s",
+            sender,
+            message.get("wbor_message_id"),
+        )
     return True
 
 
