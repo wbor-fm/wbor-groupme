@@ -1,6 +1,7 @@
 """
 Module for common utility functions for messages.
 """
+
 import uuid
 import emoji
 
@@ -30,6 +31,8 @@ class MessageUtils:
         string = string.replace(
             "\xa0", " "
         )  # Replace non-breaking space with regular spaces
+
+        string = string.replace("\r", "")  # Remove carriage returns
 
         # Replace unprintable characters with the replacement character
         sanitized = []
