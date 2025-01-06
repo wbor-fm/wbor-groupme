@@ -8,6 +8,8 @@ base = Blueprint("base", __name__)
 
 
 @base.route("/")
-def hello_world():
-    """Serve a simple static Hello World page at the root"""
-    return "<h1>wbor-groupme is online!</h1>"
+def is_online():
+    """
+    Health check endpoint.
+    """
+    return "OK", 200
