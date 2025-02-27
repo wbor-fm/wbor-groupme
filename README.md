@@ -1,43 +1,58 @@
 # wbor-groupme
 
-We have a GroupMe group that includes all members of station management. This chat is used to monitor messages from various sources, including incoming Twilio (text-the-DJ) SMS messages, our UPS backups, our Sage Digital ENDEC, and our online AzuraCast streams.
+WBOR is Bowdoin College's student-run non-commercial radio station. Like any station, we rely on various audio processing equipment and data sources that need constant monitoring. To centralize relevant alerts and notifications, we use a GroupMe chat that includes station management members. Messages are sent to this chat from multiple sources, including:
 
-This application serves as a message handler for the GroupMe chat. Various sources submit messages to RabbitMQ, which are then consumed by this application. The messages are then forwarded to the groupchat.
+- **Twilio** – SMS messages for our "text-the-DJ" service
+- **UPS backup units** – Alerts for power outages
+- **Sage Digital ENDEC** – [Emergency alert system](https://en.wikipedia.org/wiki/Emergency_Alert_System?useskin=vector) notifications
+- **AzuraCast public streams** – Status updates for our online radio stream
 
-Additionally, this application can receive messages directly via an HTTP POST request to /send, which is meant for sources that can't use RabbitMQ.
+This application acts as a message handler for the GroupMe chat. The aforementioned message sources (producers) submit messages to our [RabbitMQ](https://www.rabbitmq.com/) message exchange, where they are consumed by this application and forwarded to the admin chat.
 
-The application also includes a callback endpoint for the GroupMe API, which is triggered when messages are sent to the chat.
+## Why centralize GroupMe API interaction?
 
-In our particular architecture, this allows station management to:
+Consolidating GroupMe API interactions into a single application provides several advantages:
 
-- Ban/unban a phone number from sending messages
-- Displaying message statistics for a sender
+- **Single point of contact** – No need to distribute our API key across multiple producers or duplicate API logic
+- **External message logging** – Messages are stored in a database for tracking and auditing
+- **Message statistics tracking** – Enables analysis of message frequency and patterns
+- **Source-specific business logic** – Includes actions such as banning/unbanning senders or callers
+- **Group chat callback actions** – Automates responses and interactions based on incoming messages
 
-Finally, all interactions with the GroupMe API are logged in Postgres (externally) for auditing purposes. If this application is down, producers should fallback to their own API interaction with GroupMe (for immediate message sending) and then queue the logs for said interactions to be sent here to be consumed upon spinning back up. This ensures Postgres gets the whole picture, even if this app is taken offline for any reason.
+Additionally, this application supports direct message submission via an HTTP `POST` request to `/send`, used by sources that cannot publish messages via RabbitMQ.
 
-## Message handling
+## Failure Handling
 
-- Messages are received from RabbitMQ and processed by the appropriate handler based on the routing key. Message body sanitization takes place unless the message was already sent (as in the aforementioned fallback scenario).
+If this application goes offline, producers should fall back to [their own direct API interaction with GroupMe](https://github.com/WBOR-91-1-FM/wbor-groupme-producer) to ensure immediate message delivery. However, logs for these interactions should still be queued for later submission to this application once it is back online. This ensures that the logging database remains comprehensive, even if temporary outages occur.
 
-### Expects incoming keys
+## Message Handling
 
-- `source.twilio.#`: TwilioHandler()
-- `source.standard.#`: StandardHandler() - could generate locally from /send
-  - `sms.incoming`: Incoming SMS messages
+- Messages are received from RabbitMQ and routed to the appropriate handler based on the routing key.
+- Message body sanitization occurs unless the message was previously sent via a fallback method.
 
-### Emits keys
+### Expected Incoming Keys
 
-- `source.groupme.msg`: Bot message logs (includes images attached to messages)
-- `source.groupme.img`: Image service API logs
-- `source.groupme.callback`: Chat callback logs
-- `source.#`: Using POST /send, the source is potentially wildcard
+| Routing Key Pattern | Handler | Description |
+|---------------------|---------|-------------|
+| `source.twilio.#` | `TwilioHandler()` | Handles incoming messages from Twilio (e.g., SMS) |
+| `source.standard.#` | `StandardHandler()` | Handles general messages, including those sent via `/send` |
+| `source.standard.sms.incoming` | `StandardHandler()` | Processes incoming SMS messages |
+
+### Emitted Keys
+
+| Routing Key Pattern | Purpose |
+|---------------------|---------|
+| `source.groupme.msg` | Logs bot messages, including attached images |
+| `source.groupme.img` | Logs image service API interactions |
+| `source.groupme.callback` | Logs chat callback events |
+| `source.#` | Used for messages submitted via `POST /send` |
 
 ## TODO
 
-- Rate limiting outbound message sending as to not upset GroupMe's API
-- Callback action implementation
-  - Block sender based on the message's UID
-  - Implement message statistics tracking and retrieval
-  - Implement message banning/unbanning
-  - Remotely clear the [dashboard](https://github.com/WBOR-91-1-FM/wbor-studio-dashboard) screen?
-    - Publish a message to the MQ exchange
+- Implement **rate limiting** for outbound messages to comply with GroupMe's API constraints
+- Implement **callback actions**, including:
+  - Blocking a sender based on message UID
+  - Message statistics tracking and retrieval
+  - Implementing message banning/unbanning
+  - Remotely clearing the [studio dashboard](https://github.com/WBOR-91-1-FM/wbor-studio-dashboard) screen by publishing a message to the RabbitMQ exchange
+- Implement `!who` command to return sender information based on previous messages or a provided UID
