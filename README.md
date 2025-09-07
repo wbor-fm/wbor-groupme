@@ -23,7 +23,7 @@ Additionally, this application supports direct message submission via an HTTP `P
 
 ## Failure Handling
 
-If this application goes offline, producers should fall back to [their own direct API interaction with GroupMe](https://github.com/WBOR-91-1-FM/wbor-groupme-producer) to ensure immediate message delivery. However, logs for these interactions should still be queued for later submission to this application once it is back online. This ensures that the logging database remains comprehensive, even if temporary outages occur.
+If this application goes offline, producers should fall back to [their own direct API interaction with GroupMe](https://github.com/wbor-fm/wbor-groupme-producer) to ensure immediate message delivery. However, logs for these interactions should still be queued for later submission to this application once it is back online. This ensures that the logging database remains comprehensive, even if temporary outages occur.
 
 ## Message Handling
 
@@ -54,5 +54,5 @@ If this application goes offline, producers should fall back to [their own direc
   - Blocking a sender based on message UID
   - Message statistics tracking and retrieval
   - Implementing message banning/unbanning
-  - Remotely clearing the [studio dashboard](https://github.com/WBOR-91-1-FM/wbor-studio-dashboard) screen by publishing a message to the RabbitMQ exchange
+  - Remotely clearing the [studio dashboard](https://github.com/wbor-fm/wbor-studio-dashboard) screen by publishing a message to the RabbitMQ exchange
 - Implement `!who` command to return sender information based on previous messages or a provided UID
