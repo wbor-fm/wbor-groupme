@@ -23,6 +23,7 @@ run: stop
 	docker run -d \
 		--network $(NETWORK_NAME) \
 		--name $(CONTAINER_NAME) \
+		--restart unless-stopped \
 		--log-driver json-file \
 		--log-opt max-size=5m \
 		--log-opt max-file=2 \
